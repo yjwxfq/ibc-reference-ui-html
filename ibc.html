@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IBC reference UI</title>
+  <script src="https://code.jquery.com/jquery-3.6.0.slim.min.js" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/anchor-link@3.5.1/lib/anchor-link.bundle.js"></script>
+  <script src="https://unpkg.com/anchor-link-browser-transport@3.5.1/lib/anchor-link-browser-transport.bundle.js"></script>
+  <script src="./logic.js"></script>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-gH2yIJqKdNHPEq0n4Mqa/HGKIhSkIHeL5AyhkYV8i59U5AR6csBvApHHNl/vI1Bx" crossorigin="anonymous">
+</head>
+
+<body style="max-width:640px;margin:40px auto;">
+  <div class="container text-center" style="border:1px solid #64646d;padding:24px;">
+    <h3>IBC</h3>
+    <div class="flexRow"  style="margin-top:24px;">
+      <!-- <label>From</label> -->
+      <select onchange="sourceChainChanged(this.value)" class="form-select chainSelect" id="sourceChain">
+        <option value="" disabled selected>Select Chain</option>
+      </select>
+      <select class="form-select chainSelect" id="destinationChain" disabled>
+        <option value="" disabled selected></option>
+      </select>
+    </div>
+
+    <div class="flexRow" style="margin-top:24px;">
+      <!-- <label>To</label> -->
+
+      <button style="display:none;" id="sourceLogin" onclick="login('source')" type="button" class="btn btn-success">Login</button>
+      <button style="display:none;" id="sourceLogout" onclick="logout('source')" type="button" class="btn btn-danger">Logout</button>
+
+      <button style="display:none;" id="destinationLogin" onclick="login('destination')" type="button" class="btn btn-success">Login</button>
+      <button style="display:none;" id="destinationLogout" onclick="logout('destination')" type="button" class="btn btn-danger">Logout</button>
+    </div>
+    <hr>
+    <div class="flexRow" style="margin-top:48px;">
+      <!-- <label>Token</label> -->
+
+      <div class="input-group"  style="width:260px;">
+        <input placeholder="Amount" type="number"class="form-control"></input>
+        <div class="input-group-prepend">
+          <select style="width:120px;" class="form-select tokenSelect" id="sourceAsset">
+            <option value="" disabled selected>Token</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="transfer()" type="button" class="btn btn-primary">Transfer and Prove</button>
+
+      <!-- -->
+    </div>
+
+    <!-- <div class="flexRow" style="margin-top:24px;">
+      <label>Amount</label>
+    </div> -->
+    <div class="flexRow" style="justify-content: center;margin-top:40px">
+  </div>
+</body>
+
+
+
+
+
+
+
+<style>
+  html,body{
+    background-color: #31313d;
+    color:white;
+    font-family: Verdana, Geneva, Tahoma, sans-serif;
+  }
+  .flexRow{ display: flex; align-items: center; gap: 20px; justify-content: space-between;}
+  label{width:70px; text-align: left;color:white;}
+  .form-select, .form-control, button{ width:260px;}
+  .form-select:disabled { background-color: #adafb2; }
+</style>
+</html>
