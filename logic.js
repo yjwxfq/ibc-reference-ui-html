@@ -162,6 +162,7 @@ const transfer = async () => {
   const sourceChain =  chains.find(c=>c.name===$(`#sourceChain`).val());
   const destinationChain =  chains.find(c=>c.name===$(`#destinationChain`).val());
   let tokenRow = sourceChain.symbols.find(r=>r.id===parseInt($('#sourceAsset').val()));
+  console.log("tokenRow",tokenRow)
   let amount = parseFloat($("#sourceAsset").val());
   const quantity = `${amount.toFixed(4)} ${tokenRow.symbol}`
 
@@ -212,7 +213,7 @@ const transfer = async () => {
       const checkproofAction = {
         authorization: [destinationChain.auth],
         name: tokenRow.native ? "issue" : "withdraw",
-        account: "wlockandy1",
+        account: tokenRow.pairedWrapTokenContract,
         data: { 
           caller: destinationChain.auth.actor,
           actionproof: {
