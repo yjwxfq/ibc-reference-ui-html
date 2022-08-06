@@ -5,9 +5,8 @@ const chains = [{
   name: "eostestnet",
   label: "EOS Testnet",
   proofSocket: "ws://138.201.202.27:7788", //still just firehose relayer
-  bridgeContract:"andybridge1",
   bridgeContract:"bridge3",
-  wrapLockContractsArray: ["andywlockb", "andywlockc"],
+  wrapLockContractsArray: ["wlockandy1"],
   session:null,
   wrapLockContracts: [],
   symbols:null,
@@ -17,10 +16,10 @@ const chains = [{
   nodeUrl: 'https://uxtestnet.goldenplatform.com',
   name: "uxtestnet",
   label: "UX Testnet",
-  proofSocket: "ws://localhost:7788", //still just firehose relayer
-  // proofSocket:"ws://138.201.202.27:27788",
-  bridgeContract:"andybridge1",
-  wrapLockContractsArray: ["andywlockb", "andywlockc"],
+  proofSocket: "ws://localhost:7788",
+  // proofSocket:"ws://138.201.202.27:27788", //still just firehose relayer
+  bridgeContract:"bridge3",
+  wrapLockContractsArray: ["wlockandy1"],
   session:null,
   wrapLockContracts: [],
   symbols:null,
@@ -212,10 +211,10 @@ const transfer = async () => {
 
       const checkproofAction = {
         authorization: [destinationChain.auth],
-        name: "checkproofb",
-        account: destinationChain.bridgeContract,
+        name: tokenRow.native ? "issue" : "withdraw",
+        account: "wlockandy1",
         data: { 
-          prover: destinationChain.auth.actor,
+          caller: destinationChain.auth.actor,
           actionproof: {
             action: {
               account: emitxferAction.act.account,
@@ -232,7 +231,7 @@ const transfer = async () => {
             },
             amproofpath: res.proof.amproofpath 
           },
-          blockproof: {
+          heavyproof: {
             chain_id: sourceChain.chainId,
             blocktoprove: res.proof.blockproof,
             bftproof:res.proof.bftproof 
@@ -241,12 +240,10 @@ const transfer = async () => {
       };
 
       //format timestamp in headers
-      for (var bftproof of checkproofAction.data.blockproof.bftproof)
+      for (var bftproof of checkproofAction.data.heavyproof.bftproof)
         bftproof.header.timestamp = bftproof.header.timestamp.slice(0,-1);
       
-      checkproofAction.data.blockproof.blocktoprove.block.header.timestamp = checkproofAction.data.blockproof.blocktoprove.block.header.timestamp.slice(0,-1);
-      
-
+      checkproofAction.data.heavyproof.blocktoprove.block.header.timestamp = checkproofAction.data.heavyproof.blocktoprove.block.header.timestamp.slice(0,-1);
       //submit proof to destination chain's bridge contract
       let destinationActions = [checkproofAction];
 
