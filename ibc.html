@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>IBC reference UI</title>
-  <script src="https://code.jquery.com/jquery-3.6.0.slim.min.js" crossorigin="anonymous"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/anchor-link@3.5.1/lib/anchor-link.bundle.js"></script>
   <script src="https://unpkg.com/anchor-link-browser-transport@3.5.1/lib/anchor-link-browser-transport.bundle.js"></script>
   <script src="./logic.js"></script>
@@ -12,8 +12,8 @@
 </head>
 
 <body style="max-width:640px;margin:40px auto;">
-  <div class="container text-center" style="border:1px solid #64646d;padding:24px;">
-    <h3>IBC</h3>
+  <div class="container" style="border:1px solid #64646d;padding:24px;">
+    <h3 class="text-center">IBC</h3>
     <div class="flexRow"  style="margin-top:24px;">
       <!-- <label>From</label> -->
       <select onchange="sourceChainChanged(this.value)" class="form-select chainSelect" id="sourceChain">
@@ -50,10 +50,17 @@
       <!-- -->
     </div>
 
-    <!-- <div class="flexRow" style="margin-top:24px;">
-      <label>Amount</label>
-    </div> -->
-    <div class="flexRow" style="justify-content: center;margin-top:40px">
+
+    <div class="box">
+      <div>Schedule Version in destination bridge: <span id="lastProven"></span></div>
+      <div>Source chain Active Schedule Version: <span id="activeSchedule"></span></div>
+      <div>Source chain Pending Schedule: <span id="pendingSchedule"></span></div>
+
+      <section id="status" style="margin-top:24px"></section>
+      <!-- TODO add progress -->
+
+    </div>
+
   </div>
 </body>
 
@@ -73,5 +80,9 @@
   label{width:70px; text-align: left;color:white;}
   .form-select, .form-control, button{ width:260px;}
   .form-select:disabled { background-color: #adafb2; }
+  .box{padding:16px; border:1px solid #64646d;margin-top:44px;}
+  .box > div{
+    display:flex; justify-content: space-between;
+  }
 </style>
 </html>

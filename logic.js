@@ -29,16 +29,13 @@ const chains = [{
 let sourceChain, destinationChain, tokenRow, progress;
 //on DOM ready
 $(async function() {
-  console.log("ready")
   //fetch wraplock contracts tokens & details
   for (var chain of chains) {
     for (var wrapLockContract of chain.wrapLockContractsArray) {
-      let details = await fetch(`${chain.nodeUrl}/v0/state/table?account=${wrapLockContract}&table=global&scope=${wrapLockContract}&json=true`);
-      details = await details.json();
+      let details = await $.get(`${chain.nodeUrl}/v0/state/table?account=${wrapLockContract}&table=global&scope=${wrapLockContract}&json=true`);
       details = details.rows[0];
       if (details && details.json.bridge_contract === chain.bridgeContract) {
-        let symbolsres = await fetch(`${chain.nodeUrl}/v0/state/table_scopes?account=${details.json.native_token_contract}&table=stat`);
-        symbolsres = await symbolsres.json();
+        let symbolsres = await $.get(`${chain.nodeUrl}/v0/state/table_scopes?account=${details.json.native_token_contract}&table=stat`);
         let symbols = symbolsres.scopes.map(r => toName(nameToUint64(r)));
         chain.wrapLockContracts.push({
           chain_id: details.json.chain_id,
@@ -51,22 +48,31 @@ $(async function() {
       }
     }
   }
-
   //add chain options to chain select elements
   for (var chain of chains) {
     $('#sourceChain').append(new Option(chain.label, chain.name));
     $('#destinationChain').append(new Option(chain.label, chain.name));
   }
 
+  // $("#sourceChain").val("uxtestnet");
+  // sourceChainChanged("uxtestnet");
+  console.log("ready");
 });
 
 //handler for source chain change
 const sourceChainChanged = val =>{
+
+
   const sourceChain = chains.find(c=>c.name==val);
   const destinationChain = chains.find(c=>c.name !== val);
   $("#destinationChain").val(destinationChain.name);
   $('#sourceLogin').show();
   $('#destinationLogin').show();
+
+  $('#lastProven').html("");
+  $('#activeSchedule').html("");
+  $('#pendingSchedule').html("");
+  $('#status').html("");
 
   //set sourceChain symbols if not yet set
   if (!sourceChain.symbols) {
@@ -121,6 +127,7 @@ const sourceChainChanged = val =>{
   optionsHtml+=`</optgroup>`;
 
   $('#sourceAsset').append(optionsHtml);
+
 }
 
 
@@ -159,12 +166,14 @@ function logout(type){
 
 //transfer function to lock or retire tokens
 const transfer = async () => {
+  //get values form UI
   sourceChain =  chains.find(c=>c.name===$(`#sourceChain`).val());
   destinationChain =  chains.find(c=>c.name===$(`#destinationChain`).val());
   tokenRow = sourceChain.symbols.find(r=>r.id===parseInt($('#sourceAsset').val()));
-  console.log("tokenRow",tokenRow)
   let amount = parseFloat($("#amount").val());
-  const quantity = `${amount.toFixed(4)} ${tokenRow.symbol}`
+  const quantity = `${amount.toFixed(4)} ${tokenRow.symbol}`;
+  
+  console.log("tokenRow",tokenRow)
 
   let sourceActions;
 
@@ -187,27 +196,33 @@ const transfer = async () => {
     const lockActionTrace = result.processed.action_traces.find(r=>r.act.name==='lock' || r.act.name==='retire');
     const emitxferAction = lockActionTrace.inline_traces.find(r=>r.act.name==='emitxfer');
     //show tx explorer link in UI
-    console.log("emitxferAction to prove", emitxferAction)
+    console.log("emitxferAction to prove", emitxferAction);
 
-    const transferProofAction = await getProof({
+
+    //Get schedule proofs;
+    $('#status').append(`<div>Fetching proof for schedules...</div>`);
+    const scheduleProofs = await getScheduleProofs();
+    console.log("scheduleProofs",scheduleProofs)
+
+    $('#status').append(`<div>Fetching proof for emitxfer...</div>`);
+    const emitxferProof = await getProof({
       type: "heavyProof",
       action: emitxferAction,
       block_to_prove: emitxferAction.block_num //block that includes the emitxfer action we want to prove
     });
     
+    console.log("emitxferProof",emitxferProof)
 
     //submit proof to destination chain's bridge contract
-    let destinationActions = [transferProofAction];
-
-    //ADD schedule proofs to actions;
+    let destinationActions = [...scheduleProofs, emitxferProof];
 
     console.log("destinationActions",destinationActions)
+    $('#status').append(`<div>Submitting Proofs...</div>`);
 
-    console.log(JSON.stringify(destinationActions))
-    
     destinationChain.session.transact({actions: destinationActions}).then((result) => {
       console.log("result", result);
-      window.open(destinationChain.nodeUrl + '/tx/' + result.processed.id);
+      $('#status').append(`<div style="margin-top:24px;"><a target="_blank" style="color:#1a8754" href="${destinationChain.nodeUrl}/tx/${result.processed.id}">TX ID<a></div>`);
+
     }).catch(err=>{
       console.log("Error submitting transaction", err);
     })
@@ -215,8 +230,118 @@ const transfer = async () => {
   })
 }
 
+const getScheduleProofs = async () => {
+  async function getProducerScheduleBlock(blocknum) {
+    try{
+      console.log("fetching block", blocknum);
+      const sourceAPIURL = sourceChain.nodeUrl+"/v1/chain";
+      var header = await $.post(sourceAPIURL + "/get_block", JSON.stringify({"block_num_or_id":blocknum,"json": true}));
+      console.log("header",header)
+      let target_schedule = header.schedule_version;
+      
+      let min_block = 2;
+      //fetch last proved block to use as min block for schedule change search 
+      const lastBlockProved = await $.post(destinationChain.nodeUrl+ '/v1/chain/get_table_rows', JSON.stringify({
+        code: destinationChain.bridgeContract,
+        table: "lastproofs", 
+        scope: sourceChain.name,
+        limit: 1, reverse: true, show_payer: false, json: true
+      }));
 
-const getProof = ({type, block_to_prove, action}) => {
+      if (lastBlockProved) min_block = lastBlockProved.rows[0].block_height;
+
+      let max_block = blocknum;
+      console.log("checking range",min_block + " -> " + max_block);
+      
+      //detect active schedule change
+      while (max_block - min_block > 1) {
+        console.log("checking blocknum",blocknum)
+        blocknum = Math.round((max_block + min_block) / 2);
+        header = await $.post(sourceAPIURL + "/get_block", JSON.stringify({"block_num_or_id":blocknum,"json": true}));
+        if (header.schedule_version < target_schedule) min_block = blocknum;
+        else max_block = blocknum;
+      }
+  
+      if (blocknum > 240) blocknum -= 240;
+      
+      //search before active schedule change for new_producer_schedule 
+      while (blocknum > 1 && !("new_producer_schedule" in header)) {
+        header = await $.post(sourceAPIURL + "/get_block", JSON.stringify({"block_num_or_id":blocknum,"json": true}));
+        blocknum--;
+      }
+      return blocknum+1;  
+    }catch(ex){ 
+      console.log("getProducerScheduleBlock ex",ex)
+      return null;}
+  }
+
+  console.log("\ngetScheduleBlocksToProve:");
+  const proofs = [];
+  //get head block
+  let schedule_block = parseInt((await $.get(sourceChain.nodeUrl+ '/v1/chain/get_info')).head_block_num);
+  console.log("Chain's head block number", schedule_block);
+
+  const bridgeScheduleData = (await $.post(destinationChain.nodeUrl+ '/v1/chain/get_table_rows', JSON.stringify({
+    code: destinationChain.bridgeContract,
+    table: "schedules", 
+    scope: sourceChain.name,
+    limit: 1, reverse: true, show_payer: false, json: true
+  })));
+  console.log("bridgeScheduleData",bridgeScheduleData);
+  
+  var last_proven_schedule_version = 0;
+  if (bridgeScheduleData.rows.length > 0) last_proven_schedule_version = bridgeScheduleData.rows[0].producer_schedule.version;
+
+  if (!last_proven_schedule_version) return console.log('No Schedule Found in Contract!');
+
+  console.log('Last Proven schedule version: ' + last_proven_schedule_version);
+  $("#lastProven").html(last_proven_schedule_version)
+
+  let schedule = (await $.get(sourceChain.nodeUrl+ '/v1/chain/get_producer_schedule'));
+  var schedule_version = parseInt(schedule.active.version);
+  console.log("Active schedule version", schedule_version);
+  $("#activeSchedule").html(schedule_version)
+  
+
+  while (schedule_version > last_proven_schedule_version) {
+
+    let block_num = await getProducerScheduleBlock(schedule_block);
+    console.log("block_num",block_num)
+    if (!block_num) return; //should never occur
+    $('#status').append(`<div>Fetching proof for previous schedule (${block_num})...</div>`);
+    var proof = await getProof({block_to_prove: block_num});
+    console.log("schedule proof",block_num, proof)
+    schedule_version = proof.blockproof.blocktoprove.block.header.schedule_version;
+    console.log("schedule_version",schedule_version)
+    schedule_block = proof.blockproof.block.block_num;
+    proofs.unshift(proof);
+  };
+
+  // check for pending schedule and prove pending schedule if found;
+  if (schedule.pending) {
+    $('#pendingSchedule').html("YES");
+    $('#status').append("<div>Fetching proof for pending schedule...</div>");
+    console.log("Found a pending schedule")
+    // schedule_version++;
+    console.log("New schedule version required",schedule_version+1)
+
+    let newPendingBlockHeader=null;
+    let currentBlock = schedule_block;
+    while(!newPendingBlockHeader){
+      let bHeader = (await $.post(`${sourceChain.nodeUrl}/v1/chain/get_block`, JSON.stringify({ block_num_or_id: currentBlock })));
+      if (bHeader['new_producer_schedule']) newPendingBlockHeader = bHeader;
+      else currentBlock--;
+    }
+    console.log("newPendingBlockHeader found",newPendingBlockHeader);
+    var pendingProof = await getProof({block_to_prove: newPendingBlockHeader.block_num});
+    console.log("pending schedule proof",newPendingBlockHeader.block_num, pendingProof);
+    proofs.push(pendingProof); //push pending after proving active
+  } else $('#pendingSchedule').html("NO");
+
+  return proofs;
+};
+
+const getProof = ({type="heavyProof", block_to_prove, action}) => {
   return new Promise(resolve=>{
     //initialize socket to proof server
     const ws = new WebSocket(sourceChain.proofSocket);
