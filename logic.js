@@ -4,8 +4,8 @@ const chains = [{
   nodeUrl: 'https://eostestnet.goldenplatform.com',
   name: "eostestnet",
   label: "EOS Testnet",
-  // proofSocket: "ws://138.201.202.27:7788", //still just firehose relayer
-  proofSocket: "ws://localhost:7789",
+  proofSocket: "ws://195.201.60.252:7788",
+  // proofSocket: "wss://eostestnet.goldenplatform.com/ibc", //TODO fix nginx closing connection
   bridgeContract:"bridge3",
   wrapLockContractsArray: ["wlockandy1"],
   session:null,
@@ -203,6 +203,8 @@ const transfer = async () => {
     //ADD schedule proofs to actions;
 
     console.log("destinationActions",destinationActions)
+
+    console.log(JSON.stringify(destinationActions))
     
     destinationChain.session.transact({actions: destinationActions}).then((result) => {
       console.log("result", result);
@@ -220,9 +222,12 @@ const getProof = ({type, block_to_prove, action}) => {
     //initialize socket to proof server
     const ws = new WebSocket(sourceChain.proofSocket);
 
+    ws.addEventListener('close', (event) => { console.log("close event",event) });
+
     ws.addEventListener('open', (event) => {
       // connected to websocket server
-      const query = { type, action_receipt: action.receipt, block_to_prove };
+      const query = { type, block_to_prove };
+      if (action) query.action_receipt = action.receipt;
       ws.send(JSON.stringify(query));
     });
 
@@ -230,30 +235,24 @@ const getProof = ({type, block_to_prove, action}) => {
     ws.addEventListener('message', (event) => {
       // console.log("data from proof server",event.data);
       const res = JSON.parse(event.data);
-      console.log(res);
+      console.log("Received message from ibc proof server", res);
 
       if (res.type =='progress') return progress = res.progress;
 
       if (res.type !=='proof') return;
       ws.close();
 
-      //handle issue/retire if proving action, else submit block proof to bridge directly
-      const name = !action ? "checkproofa" : tokenRow.native ? "issue" : "withdraw";
-      const account = !action ? destinationChain.bridgeContract : tokenRow.native ? tokenRow.pairedWrapTokenContract : tokenRow.wrapLockContract;
-      let userKey = !action ?  "prover" : "caller";
-      let proofKey = !action ? "blockproof" : "heavyproof";
-
-      const proofAction = { authorization: [destinationChain.auth], name, account, data:{} };
-
-      proofAction.data[userKey] = destinationChain.auth.actor;
-
-      proofAction.data[proofKey] = {
-        chain_id: sourceChain.chainId,
-        blocktoprove: res.proof.blockproof,
-        bftproof: res.proof.bftproof 
+      //handle issue/withdraw if proving lock/retire 's emitxfer action, else submit block proof to bridge directly (for schedules)
+      const actionToSubmit = { 
+        authorization: [destinationChain.auth],
+        name: !action ? "checkproofa" : tokenRow.native ? "issue" : "withdraw",
+        account: !action ? destinationChain.bridgeContract : tokenRow.native ? tokenRow.pairedWrapTokenContract : tokenRow.wrapLockContract,
+        data: { ...res.proof, prover: destinationChain.auth.actor } 
       };
 
-      if (action) proofAction.data.actionproof = {
+      //if proving an action, add action and formatted receipt to actionproof object
+      if (action) actionToSubmit.data.actionproof = {
+        ...res.proof.actionproof,
         action: {
           account: action.act.account,
           name: action.act.name,
@@ -262,22 +261,18 @@ const getProof = ({type, block_to_prove, action}) => {
         },
         receipt: {
           ...action.receipt,
-          auth_sequence:[{
-            account: action.receipt.auth_sequence[0][0],
-            sequence: action.receipt.auth_sequence[0][1],
-          }]
+          auth_sequence: [{ account: action.receipt.auth_sequence[0][0], sequence: action.receipt.auth_sequence[0][1] }]
         },
-        amproofpath: res.proof.amproofpath 
       }
 
-  
-      //format timestamp in headers
-      for (var bftproof of proofAction.data[proofKey].bftproof)
-        bftproof.header.timestamp = bftproof.header.timestamp.slice(0,-1);
-      
-      proofAction.data[proofKey].blocktoprove.block.header.timestamp = proofAction.data[proofKey].blocktoprove.block.header.timestamp.slice(0,-1);
+      let blockproof = actionToSubmit.data.blockproof;
 
-      resolve(proofAction);
+      //format timestamp in headers
+      for (var bftproof of blockproof.bftproof) bftproof.header.timestamp = bftproof.header.timestamp.slice(0,-1);
+
+      blockproof.blocktoprove.block.header.timestamp = blockproof.blocktoprove.block.header.timestamp.slice(0,-1);
+
+      resolve(actionToSubmit);
     });
   });
 }
