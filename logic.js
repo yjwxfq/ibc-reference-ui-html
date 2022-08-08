@@ -4,7 +4,8 @@ const chains = [{
   nodeUrl: 'https://eostestnet.goldenplatform.com',
   name: "eostestnet",
   label: "EOS Testnet",
-  proofSocket: "ws://138.201.202.27:7788", //still just firehose relayer
+  // proofSocket: "ws://138.201.202.27:7788", //still just firehose relayer
+  proofSocket: "ws://localhost:7789",
   bridgeContract:"bridge3",
   wrapLockContractsArray: ["wlockandy1"],
   session:null,
@@ -184,10 +185,10 @@ const transfer = async () => {
     console.log(result)
     console.log(result.processed.id);
 
-    const lockActionTrace = result.processed.action_traces.find(r=>r.act.name==='lock');
+    const lockActionTrace = result.processed.action_traces.find(r=>r.act.name==='lock' || r.act.name==='retire');
     const emitxferAction = lockActionTrace.inline_traces.find(r=>r.act.name==='emitxfer');
     //show tx explorer link in UI
-
+    console.log("emitxferAction to prove", emitxferAction)
     //initialize socket to proof server
     const ws = new WebSocket(sourceChain.proofSocket);
 
@@ -204,7 +205,7 @@ const transfer = async () => {
 
     //messages from websocket server
     ws.addEventListener('message', (event) => {
-      console.log("data from proof server",event.data);
+      // console.log("data from proof server",event.data);
       const res = JSON.parse(event.data);
       console.log(res);
 
@@ -213,7 +214,7 @@ const transfer = async () => {
       const checkproofAction = {
         authorization: [destinationChain.auth],
         name: tokenRow.native ? "issue" : "withdraw",
-        account: tokenRow.pairedWrapTokenContract,
+        account: tokenRow.native ? tokenRow.pairedWrapTokenContract : tokenRow.wrapLockContract,
         data: { 
           caller: destinationChain.auth.actor,
           actionproof: {
@@ -255,7 +256,8 @@ const transfer = async () => {
       console.log("destinationActions",destinationActions)
       
       destinationChain.session.transact({actions: destinationActions}).then((result) => {
-        console.log("destinationActions", result);
+        console.log("result", result);
+        window.open(destinationChain.nodeUrl + '/tx/' + result.processed.id);
         //close websocket connection
         ws.close();
       }).catch(err=>{
