@@ -17,8 +17,7 @@ const chains = [{
   nodeUrl: 'https://uxtestnet.goldenplatform.com',
   name: "uxtestnet",
   label: "UX Testnet",
-  proofSocket: "ws://localhost:7788",
-  // proofSocket:"ws://138.201.202.27:27788", //still just firehose relayer
+  proofSocket: "ws://95.216.45.172:7788",
   bridgeContract:"bridge3",
   wrapLockContractsArray: ["wlockandy1"],
   session:null,
