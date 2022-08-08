@@ -163,7 +163,7 @@ const transfer = async () => {
   const destinationChain =  chains.find(c=>c.name===$(`#destinationChain`).val());
   let tokenRow = sourceChain.symbols.find(r=>r.id===parseInt($('#sourceAsset').val()));
   console.log("tokenRow",tokenRow)
-  let amount = parseFloat($("#sourceAsset").val());
+  let amount = parseFloat($("#amount").val());
   const quantity = `${amount.toFixed(4)} ${tokenRow.symbol}`
 
   let sourceActions;
