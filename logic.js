@@ -27,7 +27,7 @@ const chains = [{
   auth:null,
 }];
 
-
+let sourceChain, destinationChain, tokenRow, progress;
 //on DOM ready
 $(async function() {
   console.log("ready")
@@ -160,9 +160,9 @@ function logout(type){
 
 //transfer function to lock or retire tokens
 const transfer = async () => {
-  const sourceChain =  chains.find(c=>c.name===$(`#sourceChain`).val());
-  const destinationChain =  chains.find(c=>c.name===$(`#destinationChain`).val());
-  let tokenRow = sourceChain.symbols.find(r=>r.id===parseInt($('#sourceAsset').val()));
+  sourceChain =  chains.find(c=>c.name===$(`#sourceChain`).val());
+  destinationChain =  chains.find(c=>c.name===$(`#destinationChain`).val());
+  tokenRow = sourceChain.symbols.find(r=>r.id===parseInt($('#sourceAsset').val()));
   console.log("tokenRow",tokenRow)
   let amount = parseFloat($("#amount").val());
   const quantity = `${amount.toFixed(4)} ${tokenRow.symbol}`
@@ -181,7 +181,7 @@ const transfer = async () => {
   else sourceActions = [ retireWrappedToken({ tokenRow, sourceChain, destinationChain, quantity }) ];
 
   console.log("sourceActions",sourceActions)
-  sourceChain.session.transact({actions: sourceActions}).then((result) => {
+  sourceChain.session.transact({actions: sourceActions}).then( async result => {
     console.log(result)
     console.log(result.processed.id);
 
@@ -189,17 +189,40 @@ const transfer = async () => {
     const emitxferAction = lockActionTrace.inline_traces.find(r=>r.act.name==='emitxfer');
     //show tx explorer link in UI
     console.log("emitxferAction to prove", emitxferAction)
+
+    const transferProofAction = await getProof({
+      type: "heavyProof",
+      action: emitxferAction,
+      block_to_prove: emitxferAction.block_num //block that includes the emitxfer action we want to prove
+    });
+    
+
+    //submit proof to destination chain's bridge contract
+    let destinationActions = [transferProofAction];
+
+    //ADD schedule proofs to actions;
+
+    console.log("destinationActions",destinationActions)
+    
+    destinationChain.session.transact({actions: destinationActions}).then((result) => {
+      console.log("result", result);
+      window.open(destinationChain.nodeUrl + '/tx/' + result.processed.id);
+    }).catch(err=>{
+      console.log("Error submitting transaction", err);
+    })
+
+  })
+}
+
+
+const getProof = ({type, block_to_prove, action}) => {
+  return new Promise(resolve=>{
     //initialize socket to proof server
     const ws = new WebSocket(sourceChain.proofSocket);
 
     ws.addEventListener('open', (event) => {
       // connected to websocket server
-      const query = {
-        type : "heavyProof", //type of proof heavyProof or lightProof
-        action_receipt: emitxferAction.receipt, //action receipt of lock inline-action (emitxfer)
-        block_to_prove: emitxferAction.block_num //block that includes the emitxfer action we want to prove
-      };
-      console.log("query", query);
+      const query = { type, action_receipt: action.receipt, block_to_prove };
       ws.send(JSON.stringify(query));
     });
 
@@ -209,66 +232,55 @@ const transfer = async () => {
       const res = JSON.parse(event.data);
       console.log(res);
 
-      const action_receipt_digest = res.action_receipt_digest;
+      if (res.type =='progress') return progress = res.progress;
 
-      const checkproofAction = {
-        authorization: [destinationChain.auth],
-        name: tokenRow.native ? "issue" : "withdraw",
-        account: tokenRow.native ? tokenRow.pairedWrapTokenContract : tokenRow.wrapLockContract,
-        data: { 
-          caller: destinationChain.auth.actor,
-          actionproof: {
-            action: {
-              account: emitxferAction.act.account,
-              name: emitxferAction.act.name,
-              authorization: emitxferAction.act.authorization,
-              data: emitxferAction.act.hex_data
-            },
-            receipt: {
-              ...emitxferAction.receipt,
-              auth_sequence:[{
-                account: emitxferAction.receipt.auth_sequence[0][0],
-                sequence: emitxferAction.receipt.auth_sequence[0][1],
-              }]
-            },
-            amproofpath: res.proof.amproofpath 
-          },
-          heavyproof: {
-            chain_id: sourceChain.chainId,
-            blocktoprove: res.proof.blockproof,
-            bftproof:res.proof.bftproof 
-          }
-         }
+      if (res.type !=='proof') return;
+      ws.close();
+
+      //handle issue/retire if proving action, else submit block proof to bridge directly
+      const name = !action ? "checkproofa" : tokenRow.native ? "issue" : "withdraw";
+      const account = !action ? destinationChain.bridgeContract : tokenRow.native ? tokenRow.pairedWrapTokenContract : tokenRow.wrapLockContract;
+      let userKey = !action ?  "prover" : "caller";
+      let proofKey = !action ? "blockproof" : "heavyproof";
+
+      const proofAction = { authorization: [destinationChain.auth], name, account, data:{} };
+
+      proofAction.data[userKey] = destinationChain.auth.actor;
+
+      proofAction.data[proofKey] = {
+        chain_id: sourceChain.chainId,
+        blocktoprove: res.proof.blockproof,
+        bftproof: res.proof.bftproof 
       };
 
+      if (action) proofAction.data.actionproof = {
+        action: {
+          account: action.act.account,
+          name: action.act.name,
+          authorization: action.act.authorization,
+          data: action.act.hex_data
+        },
+        receipt: {
+          ...action.receipt,
+          auth_sequence:[{
+            account: action.receipt.auth_sequence[0][0],
+            sequence: action.receipt.auth_sequence[0][1],
+          }]
+        },
+        amproofpath: res.proof.amproofpath 
+      }
+
+  
       //format timestamp in headers
-      for (var bftproof of checkproofAction.data.heavyproof.bftproof)
+      for (var bftproof of proofAction.data[proofKey].bftproof)
         bftproof.header.timestamp = bftproof.header.timestamp.slice(0,-1);
       
-      checkproofAction.data.heavyproof.blocktoprove.block.header.timestamp = checkproofAction.data.heavyproof.blocktoprove.block.header.timestamp.slice(0,-1);
-      //submit proof to destination chain's bridge contract
-      let destinationActions = [checkproofAction];
+      proofAction.data[proofKey].blocktoprove.block.header.timestamp = proofAction.data[proofKey].blocktoprove.block.header.timestamp.slice(0,-1);
 
-      //TODO enable after wraplockContracts available
-      // if (tokenRow.native) destinationActions.push(issueWrappedToken({tokenRow, destinationChain, action_receipt_digest}));
-      // else destinationActions.push(withdrawNativetoken({ tokenRow, destinationChain, action_receipt_digest }));
-
-      console.log("destinationActions",destinationActions)
-      
-      destinationChain.session.transact({actions: destinationActions}).then((result) => {
-        console.log("result", result);
-        window.open(destinationChain.nodeUrl + '/tx/' + result.processed.id);
-        //close websocket connection
-        ws.close();
-      }).catch(err=>{
-        console.log("Error submitting transaction", err);
-        ws.close();
-      })
-
+      resolve(proofAction);
     });
-  })
+  });
 }
-
 
 //action creation functions
 const openBalance = ({tokenRow, chain}) => ({
