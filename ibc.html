@@ -15,7 +15,6 @@
   <div class="container" style="border:1px solid #64646d;padding:24px;">
     <h3 class="text-center">IBC</h3>
     <div class="flexRow"  style="margin-top:24px;">
-      <!-- <label>From</label> -->
       <select onchange="sourceChainChanged(this.value)" class="form-select chainSelect" id="sourceChain">
         <option value="" disabled selected>Select Chain</option>
       </select>
@@ -23,20 +22,14 @@
         <option value="" disabled selected></option>
       </select>
     </div>
-
     <div class="flexRow" style="margin-top:24px;">
-      <!-- <label>To</label> -->
-
       <button style="display:none;" id="sourceLogin" onclick="login('source')" type="button" class="btn btn-success">Login</button>
       <button style="display:none;" id="sourceLogout" onclick="logout('source')" type="button" class="btn btn-danger">Logout</button>
-
       <button style="display:none;" id="destinationLogin" onclick="login('destination')" type="button" class="btn btn-success">Login</button>
       <button style="display:none;" id="destinationLogout" onclick="logout('destination')" type="button" class="btn btn-danger">Logout</button>
     </div>
     <hr>
     <div class="flexRow" style="margin-top:48px;">
-      <!-- <label>Token</label> -->
-
       <div class="input-group"  style="width:260px;">
         <input id="amount" placeholder="Amount" type="number"class="form-control"></input>
         <div class="input-group-prepend">
@@ -46,43 +39,23 @@
         </div>
       </div>
       <button onclick="transfer()" type="button" class="btn btn-primary">Transfer and Prove</button>
-
-      <!-- -->
     </div>
-
-
     <div class="box">
-      <div>Schedule Version in destination bridge: <span id="lastProven"></span></div>
+      <div>Destination chain Bridge Schedule Version: <span id="lastProven"></span></div>
       <div>Source chain Active Schedule Version: <span id="activeSchedule"></span></div>
       <div>Source chain Pending Schedule: <span id="pendingSchedule"></span></div>
-
       <section id="status" style="margin-top:24px"></section>
-      <!-- TODO add progress -->
-
     </div>
-
   </div>
 </body>
 
-
-
-
-
-
-
 <style>
-  html,body{
-    background-color: #31313d;
-    color:white;
-    font-family: Verdana, Geneva, Tahoma, sans-serif;
-  }
-  .flexRow{ display: flex; align-items: center; gap: 20px; justify-content: space-between;}
-  label{width:70px; text-align: left;color:white;}
-  .form-select, .form-control, button{ width:260px;}
+  html,body{ background-color: #31313d; color:white; font-family: Verdana, Geneva, Tahoma, sans-serif; }
+  .flexRow{ display: flex; align-items: center; justify-content: space-between;}
+  label{ width:70px; text-align: left;color:white; }
+  .form-select, .form-control, button{ width:260px; }
   .form-select:disabled { background-color: #adafb2; }
-  .box{padding:16px; border:1px solid #64646d;margin-top:44px;}
-  .box > div{
-    display:flex; justify-content: space-between;
-  }
+  .box{ padding:16px; border:1px solid #64646d;margin-top:44px; }
+  .box > div, #status > div{ display:flex; justify-content: space-between; }
 </style>
 </html>

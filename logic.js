@@ -27,8 +27,9 @@ const chains = [{
 }];
 
 let sourceChain, destinationChain, tokenRow, progress;
-//on DOM ready
-$(async function() {
+
+fetchTokens();
+async function fetchTokens(){
   //fetch wraplock contracts tokens & details
   for (var chain of chains) {
     for (var wrapLockContract of chain.wrapLockContractsArray) {
@@ -48,16 +49,20 @@ $(async function() {
       }
     }
   }
-  //add chain options to chain select elements
-  for (var chain of chains) {
-    $('#sourceChain').append(new Option(chain.label, chain.name));
-    $('#destinationChain').append(new Option(chain.label, chain.name));
-  }
+  //on DOM ready
+  $(async function() {
+    //add chain options to chain select elements
+    for (var chain of chains) {
+      $('#sourceChain').append(new Option(chain.label, chain.name));
+      $('#destinationChain').append(new Option(chain.label, chain.name));
+    }
+  
+    // $("#sourceChain").val("uxtestnet");
+    // sourceChainChanged("uxtestnet");
+    console.log("ready");
+  });
 
-  // $("#sourceChain").val("uxtestnet");
-  // sourceChainChanged("uxtestnet");
-  console.log("ready");
-});
+}
 
 //handler for source chain change
 const sourceChainChanged = val =>{
@@ -200,11 +205,10 @@ const transfer = async () => {
 
 
     //Get schedule proofs;
-    $('#status').append(`<div>Fetching proof for schedules...</div>`);
     const scheduleProofs = await getScheduleProofs();
     console.log("scheduleProofs",scheduleProofs)
 
-    $('#status').append(`<div>Fetching proof for emitxfer...</div>`);
+    $('#status').append(`<div><div>Fetching proof for emitxfer...</div><div class="progressDiv"></div>`);
     const emitxferProof = await getProof({
       type: "heavyProof",
       action: emitxferAction,
@@ -308,7 +312,7 @@ const getScheduleProofs = async () => {
     let block_num = await getProducerScheduleBlock(schedule_block);
     console.log("block_num",block_num)
     if (!block_num) return; //should never occur
-    $('#status').append(`<div>Fetching proof for previous schedule (${block_num})...</div>`);
+    $('#status').append(`<div><div>Fetching proof for previous schedule (${block_num})...</div><div class="progressDiv"></div>`);
     var proof = await getProof({block_to_prove: block_num});
     console.log("schedule proof",block_num, proof)
     schedule_version = proof.blockproof.blocktoprove.block.header.schedule_version;
@@ -320,7 +324,7 @@ const getScheduleProofs = async () => {
   // check for pending schedule and prove pending schedule if found;
   if (schedule.pending) {
     $('#pendingSchedule').html("YES");
-    $('#status').append("<div>Fetching proof for pending schedule...</div>");
+    $('#status').append(`<div><div>Fetching proof for pending schedule...</div><div class="progressDiv"></div>`);
     console.log("Found a pending schedule")
     // schedule_version++;
     console.log("New schedule version required",schedule_version+1)
@@ -361,10 +365,11 @@ const getProof = ({type="heavyProof", block_to_prove, action}) => {
       const res = JSON.parse(event.data);
       console.log("Received message from ibc proof server", res);
 
-      if (res.type =='progress') return progress = res.progress;
+      if (res.type =='progress') $('.progressDiv').last().html(res.progress +"%");
 
       if (res.type !=='proof') return;
       ws.close();
+      $('.progressDiv').last().html("100%");
 
       //handle issue/withdraw if proving lock/retire 's emitxfer action, else submit block proof to bridge directly (for schedules)
       const actionToSubmit = { 
