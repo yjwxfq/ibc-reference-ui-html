@@ -205,7 +205,7 @@ const transfer = async () => {
 
 
     //Get schedule proofs;
-    const scheduleProofs = await getScheduleProofs();
+    const scheduleProofs = await getScheduleProofs(result.processed.block_num);
     console.log("scheduleProofs",scheduleProofs)
     if (!scheduleProofs) return  $('#status').append(`<div><div>Error, no scheduleProofs</div><div class="progressDiv"></div>`);
     $('#status').append(`<div><div>Fetching proof for emitxfer...</div><div class="progressDiv"></div>`);
@@ -234,7 +234,7 @@ const transfer = async () => {
   })
 }
 
-const getScheduleProofs = async () => {
+const getScheduleProofs = async (transferBlock) => {
   async function getProducerScheduleBlock(blocknum) {
     try{
       console.log("getProducerScheduleBlock fetching block", blocknum);
@@ -285,10 +285,7 @@ const getScheduleProofs = async () => {
 
   console.log("\ngetScheduleBlocksToProve:");
   const proofs = [];
-  //get head block
-  const head_block = parseInt((await $.get(sourceChain.nodeUrl+ '/v1/chain/get_info')).head_block_num);;
-  // let schedule_block = parseInt((await $.get(sourceChain.nodeUrl+ '/v1/chain/get_info')).head_block_num);
-  console.log("Chain's head block number", head_block);
+  console.log("Transfer block number", transferBlock);
 
   const bridgeScheduleData = (await $.post(destinationChain.nodeUrl+ '/v1/chain/get_table_rows', JSON.stringify({
     code: destinationChain.bridgeContract,
@@ -314,7 +311,7 @@ const getScheduleProofs = async () => {
   $("#activeSchedule").html("v"+schedule_version);
   if (schedule.pending) $('#pendingSchedule').html("YES"); else $('#pendingSchedule').html("NO"); 
 
-  let schedule_block = head_block;
+  let schedule_block = transferBlock + 0;
   while (schedule_version > last_proven_schedule_version) {
     $('#status').append(`<div><div>Locating block header with producer schedule (v${schedule_version})...</div><div class="progressDiv"></div>`);
 
@@ -338,7 +335,7 @@ const getScheduleProofs = async () => {
     console.log("New schedule version required",schedule_version+1)
 
     let newPendingBlockHeader=null;
-    let currentBlock = head_block;
+    let currentBlock = transferBlock + 0;
     while(!newPendingBlockHeader){
       let bHeader = (await $.post(`${sourceChain.nodeUrl}/v1/chain/get_block`, JSON.stringify({ block_num_or_id: currentBlock })));
       if (bHeader['new_producer_schedule']) newPendingBlockHeader = bHeader;
