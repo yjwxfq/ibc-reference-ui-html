@@ -265,14 +265,17 @@ const getScheduleProofs = async () => {
         if (header.schedule_version < target_schedule) min_block = blocknum;
         else max_block = blocknum;
       }
-  
-      if (blocknum > 240) blocknum -= 240;
-      
+      //go back 240 blocks before active schedule changed to find new_producer_schedule
+      //TODO might be as little as 180 blocks (15 producers * 12 blocks) behind. DO some math, fins max blocks behind it can bo and start from there and increment blocks;
+      if (blocknum > 330) blocknum -= 330;
       //search before active schedule change for new_producer_schedule 
+      let bCount = 0;
       while (blocknum > 1 && !("new_producer_schedule" in header)) {
         header = await $.post(sourceAPIURL + "/get_block", JSON.stringify({"block_num_or_id":blocknum,"json": true}));
+        bCount++;
         blocknum--;
       }
+      console.log('blocks checked for new_producer_schedule', bCount)
       return blocknum+1;  
     }catch(ex){ 
       console.log("getProducerScheduleBlock ex",ex)
@@ -299,31 +302,34 @@ const getScheduleProofs = async () => {
   if (!last_proven_schedule_version) return console.log('No Schedule Found in Contract!');
 
   console.log('Last Proven schedule version: ' + last_proven_schedule_version);
-  $("#lastProven").html(last_proven_schedule_version)
 
   let schedule = (await $.get(sourceChain.nodeUrl+ '/v1/chain/get_producer_schedule'));
   var schedule_version = parseInt(schedule.active.version);
   console.log("Active schedule version", schedule_version);
-  $("#activeSchedule").html(schedule_version)
-  
+
+  //update UI schedule status
+  $("#lastProven").html("v"+last_proven_schedule_version);
+  $("#activeSchedule").html("v"+schedule_version);
+  if (schedule.pending) $('#pendingSchedule').html("YES"); else $('#pendingSchedule').html("NO"); 
 
   while (schedule_version > last_proven_schedule_version) {
+    $('#status').append(`<div><div>Locating active schedule block (v${schedule_version})...</div><div class="progressDiv"></div>`);
 
     let block_num = await getProducerScheduleBlock(schedule_block);
     console.log("block_num",block_num)
     if (!block_num) return; //should never occur
-    $('#status').append(`<div><div>Fetching proof for previous schedule (${block_num})...</div><div class="progressDiv"></div>`);
+    $('#status').append(`<div><div>Fetching proof for active schedule (v${schedule_version})...</div><div class="progressDiv"></div>`);
     var proof = await getProof({block_to_prove: block_num});
     console.log("schedule proof",block_num, proof)
-    schedule_version = proof.blockproof.blocktoprove.block.header.schedule_version;
+    schedule_version = proof.data.blockproof.blocktoprove.block.header.schedule_version;
     console.log("schedule_version",schedule_version)
-    schedule_block = proof.blockproof.block.block_num;
+    schedule_block = proof.data.blockproof.blocktoprove.block.block_num;
     proofs.unshift(proof);
   };
 
   // check for pending schedule and prove pending schedule if found;
   if (schedule.pending) {
-    $('#pendingSchedule').html("YES");
+    // $('#pendingSchedule').html("YES");
     $('#status').append(`<div><div>Fetching proof for pending schedule...</div><div class="progressDiv"></div>`);
     console.log("Found a pending schedule")
     // schedule_version++;
@@ -340,7 +346,7 @@ const getScheduleProofs = async () => {
     var pendingProof = await getProof({block_to_prove: newPendingBlockHeader.block_num});
     console.log("pending schedule proof",newPendingBlockHeader.block_num, pendingProof);
     proofs.push(pendingProof); //push pending after proving active
-  } else $('#pendingSchedule').html("NO");
+  } 
 
   return proofs;
 };
