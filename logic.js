@@ -207,7 +207,7 @@ const transfer = async () => {
     //Get schedule proofs;
     const scheduleProofs = await getScheduleProofs();
     console.log("scheduleProofs",scheduleProofs)
-
+    if (!scheduleProofs) return  $('#status').append(`<div><div>Error, no scheduleProofs</div><div class="progressDiv"></div>`);
     $('#status').append(`<div><div>Fetching proof for emitxfer...</div><div class="progressDiv"></div>`);
     const emitxferProof = await getProof({
       type: "heavyProof",
@@ -237,7 +237,7 @@ const transfer = async () => {
 const getScheduleProofs = async () => {
   async function getProducerScheduleBlock(blocknum) {
     try{
-      console.log("fetching block", blocknum);
+      console.log("getProducerScheduleBlock fetching block", blocknum);
       const sourceAPIURL = sourceChain.nodeUrl+"/v1/chain";
       var header = await $.post(sourceAPIURL + "/get_block", JSON.stringify({"block_num_or_id":blocknum,"json": true}));
       console.log("header",header)
@@ -265,18 +265,19 @@ const getScheduleProofs = async () => {
         if (header.schedule_version < target_schedule) min_block = blocknum;
         else max_block = blocknum;
       }
-      //go back 240 blocks before active schedule changed to find new_producer_schedule
       //TODO might be as little as 180 blocks (15 producers * 12 blocks) behind. DO some math, fins max blocks behind it can bo and start from there and increment blocks;
-      if (blocknum > 330) blocknum -= 330;
+      if (blocknum > 336) blocknum -= 336;
       //search before active schedule change for new_producer_schedule 
       let bCount = 0;
-      while (blocknum > 1 && !("new_producer_schedule" in header)) {
+      while (blocknum < max_block && !("new_producer_schedule" in header)) {
         header = await $.post(sourceAPIURL + "/get_block", JSON.stringify({"block_num_or_id":blocknum,"json": true}));
         bCount++;
-        blocknum--;
+        blocknum++;
       }
-      console.log('blocks checked for new_producer_schedule', bCount)
-      return blocknum+1;  
+      blocknum--;
+      console.log('blocks checked for new_producer_schedule', bCount);
+      console.log("block with header for schedule V" + header.new_producer_schedule.version, blocknum)
+      return blocknum;  
     }catch(ex){ 
       console.log("getProducerScheduleBlock ex",ex)
       return null;}
@@ -285,8 +286,9 @@ const getScheduleProofs = async () => {
   console.log("\ngetScheduleBlocksToProve:");
   const proofs = [];
   //get head block
-  let schedule_block = parseInt((await $.get(sourceChain.nodeUrl+ '/v1/chain/get_info')).head_block_num);
-  console.log("Chain's head block number", schedule_block);
+  const head_block = parseInt((await $.get(sourceChain.nodeUrl+ '/v1/chain/get_info')).head_block_num);;
+  // let schedule_block = parseInt((await $.get(sourceChain.nodeUrl+ '/v1/chain/get_info')).head_block_num);
+  console.log("Chain's head block number", head_block);
 
   const bridgeScheduleData = (await $.post(destinationChain.nodeUrl+ '/v1/chain/get_table_rows', JSON.stringify({
     code: destinationChain.bridgeContract,
@@ -312,31 +314,31 @@ const getScheduleProofs = async () => {
   $("#activeSchedule").html("v"+schedule_version);
   if (schedule.pending) $('#pendingSchedule').html("YES"); else $('#pendingSchedule').html("NO"); 
 
+  let schedule_block = head_block;
   while (schedule_version > last_proven_schedule_version) {
-    $('#status').append(`<div><div>Locating active schedule block (v${schedule_version})...</div><div class="progressDiv"></div>`);
+    $('#status').append(`<div><div>Locating block header with producer schedule (v${schedule_version})...</div><div class="progressDiv"></div>`);
 
     let block_num = await getProducerScheduleBlock(schedule_block);
-    console.log("block_num",block_num)
+    console.log("getProducerScheduleBlock returned block_num",block_num)
     if (!block_num) return; //should never occur
     $('#status').append(`<div><div>Fetching proof for active schedule (v${schedule_version})...</div><div class="progressDiv"></div>`);
     var proof = await getProof({block_to_prove: block_num});
     console.log("schedule proof",block_num, proof)
     schedule_version = proof.data.blockproof.blocktoprove.block.header.schedule_version;
     console.log("schedule_version",schedule_version)
-    schedule_block = proof.data.blockproof.blocktoprove.block.block_num;
+    // schedule_block = proof.data.blockproof.blocktoprove.block.block_num;
+    schedule_block = block_num;
     proofs.unshift(proof);
   };
 
   // check for pending schedule and prove pending schedule if found;
   if (schedule.pending) {
-    // $('#pendingSchedule').html("YES");
     $('#status').append(`<div><div>Fetching proof for pending schedule...</div><div class="progressDiv"></div>`);
     console.log("Found a pending schedule")
-    // schedule_version++;
     console.log("New schedule version required",schedule_version+1)
 
     let newPendingBlockHeader=null;
-    let currentBlock = schedule_block;
+    let currentBlock = head_block;
     while(!newPendingBlockHeader){
       let bHeader = (await $.post(`${sourceChain.nodeUrl}/v1/chain/get_block`, JSON.stringify({ block_num_or_id: currentBlock })));
       if (bHeader['new_producer_schedule']) newPendingBlockHeader = bHeader;
@@ -369,7 +371,7 @@ const getProof = ({type="heavyProof", block_to_prove, action}) => {
     ws.addEventListener('message', (event) => {
       // console.log("data from proof server",event.data);
       const res = JSON.parse(event.data);
-      console.log("Received message from ibc proof server", res);
+      if (res.type !=='progress') console.log("Received message from ibc proof server", res);
 
       if (res.type =='progress') $('.progressDiv').last().html(res.progress +"%");
 
