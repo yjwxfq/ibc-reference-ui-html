@@ -266,9 +266,9 @@ const getScheduleProofs = async (transferBlock) => {
         else max_block = blocknum;
       }
       //TODO might be as little as 180 blocks (15 producers * 12 blocks) behind. DO some math, fins max blocks behind it can bo and start from there and increment blocks;
-      if (blocknum > 336) blocknum -= 336;
+      if (blocknum > 337) blocknum -= 337;
       //search before active schedule change for new_producer_schedule 
-      let bCount = 0;
+      let bCount = 0; //since header already checked once above
       while (blocknum < max_block && !("new_producer_schedule" in header)) {
         header = await $.post(sourceAPIURL + "/get_block", JSON.stringify({"block_num_or_id":blocknum,"json": true}));
         bCount++;
