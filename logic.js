@@ -379,7 +379,7 @@ const getProof = ({type="heavyProof", block_to_prove, action}) => {
       //handle issue/withdraw if proving lock/retire 's emitxfer action, else submit block proof to bridge directly (for schedules)
       const actionToSubmit = { 
         authorization: [destinationChain.auth],
-        name: !action ? "checkproofa" : tokenRow.native ? "issue" : "withdraw",
+        name: !action ? "checkproofa" : tokenRow.native ? "issuea" : "withdrawa",
         account: !action ? destinationChain.bridgeContract : tokenRow.native ? tokenRow.pairedWrapTokenContract : tokenRow.wrapLockContract,
         data: { ...res.proof, prover: destinationChain.auth.actor } 
       };
