@@ -5,9 +5,8 @@ const chains = [{
   name: "eostestnet",
   label: "EOS Testnet",
   proofSocket: "ws://195.201.60.252:7788",
-  // proofSocket: "wss://eostestnet.goldenplatform.com/ibc", //TODO fix nginx closing connection
   bridgeContract:"bridge3",
-  wrapLockContractsArray: ["wlockandy1"],
+  wrapLockContractsArray: ["wlockandy2"],
   session:null,
   wrapLockContracts: [],
   symbols:null,
@@ -19,7 +18,7 @@ const chains = [{
   label: "UX Testnet",
   proofSocket: "ws://95.216.45.172:7788",
   bridgeContract:"bridge3",
-  wrapLockContractsArray: ["wlockandy1"],
+  wrapLockContractsArray: ["wlockandy2"],
   session:null,
   wrapLockContracts: [],
   symbols:null,
@@ -96,7 +95,7 @@ const sourceChainChanged = val =>{
         });
         id++;
       }
-    nativeList =  nativeList.sort((a, b) => (a.symbol > b.symbol ? 1 : -1));
+    nativeList = nativeList.sort((a, b) => (a.symbol > b.symbol ? 1 : -1));
 
     let wrappedList = [];
     id = 1000;
@@ -186,9 +185,9 @@ const transfer = async () => {
 
   //if native token, then transfer token to the wraplock token and lock it
   if (tokenRow.native) sourceActions = [
-    openBalance({ tokenRow, chain:sourceChain }),
-    transferToken({ tokenRow, chain:sourceChain, quantity }),
-    lockToken({ tokenRow,sourceChain, quantity, destinationChain }),
+    // openBalance({ tokenRow, chain:sourceChain }), //no longer needer
+    transferToken({ tokenRow, sourceChain, destinationChain, quantity }),
+    // lockToken({ tokenRow,sourceChain, quantity, destinationChain }), //no longer needer
   ];
   //if retiring tokens from a non-native chain
   else sourceActions = [ retireWrappedToken({ tokenRow, sourceChain, destinationChain, quantity }) ];
@@ -198,7 +197,7 @@ const transfer = async () => {
     console.log(result)
     console.log(result.processed.id);
 
-    const lockActionTrace = result.processed.action_traces.find(r=>r.act.name==='lock' || r.act.name==='retire');
+    const lockActionTrace = result.processed.action_traces.find(r=>r.act.name==='transfer' || r.act.name==='retire');
     const emitxferAction = lockActionTrace.inline_traces.find(r=>r.act.name==='emitxfer');
     //show tx explorer link in UI
     console.log("emitxferAction to prove", emitxferAction);
@@ -423,15 +422,15 @@ const openBalance = ({tokenRow, chain}) => ({
   }
 });
 
-const transferToken = ({tokenRow, chain, quantity} ) => ({
+const transferToken = ({tokenRow, sourceChain, destinationChain, quantity} ) => ({
   account: tokenRow.nativeTokenContract,
   name: "transfer",
-  authorization: [chain.auth],
+  authorization: [sourceChain.auth],
   data: {
-    from: chain.auth.actor,
+    from: sourceChain.auth.actor,
     to: tokenRow.wrapLockContract,
     quantity,
-    memo: "transfer to wrap lock token"
+    memo: destinationChain.auth.actor
   }
 });
 
