@@ -4,7 +4,7 @@ const chains = [{
   nodeUrl: 'https://eostestnet.goldenplatform.com',
   name: "eostestnet",
   label: "EOS Testnet",
-  proofSocket: "ws://195.201.60.252:7788",
+  proofSocket: "ws://195.201.60.252:17788",
   bridgeContract:"bridge3",
   wrapLockContractsArray: ["wlockandy2"],
   session:null,
@@ -16,7 +16,7 @@ const chains = [{
   nodeUrl: 'https://uxtestnet.goldenplatform.com',
   name: "uxtestnet",
   label: "UX Testnet",
-  proofSocket: "ws://95.216.45.172:7788",
+  proofSocket: "ws://95.216.45.172:17788",
   bridgeContract:"bridge3",
   wrapLockContractsArray: ["wlockandy2"],
   session:null,
@@ -32,6 +32,7 @@ async function fetchTokens(){
   //fetch wraplock contracts tokens & details
   for (var chain of chains) {
     for (var wrapLockContract of chain.wrapLockContractsArray) {
+      //TODO convert dfuse state gets to nodeos api posts
       let details = await $.get(`${chain.nodeUrl}/v0/state/table?account=${wrapLockContract}&table=global&scope=${wrapLockContract}&json=true`);
       details = details.rows[0];
       if (details && details.json.bridge_contract === chain.bridgeContract) {
@@ -367,11 +368,13 @@ const getProof = ({type="heavyProof", block_to_prove, action}) => {
     ws.addEventListener('message', (event) => {
       // console.log("data from proof server",event.data);
       const res = JSON.parse(event.data);
+      //log non-progress messages from ibc server
       if (res.type !=='progress') console.log("Received message from ibc proof server", res);
 
       if (res.type =='progress') $('.progressDiv').last().html(res.progress +"%");
 
       if (res.type !=='proof') return;
+
       ws.close();
       $('.progressDiv').last().html("100%");
 
@@ -384,28 +387,46 @@ const getProof = ({type="heavyProof", block_to_prove, action}) => {
       };
 
       //if proving an action, add action and formatted receipt to actionproof object
-      if (action) actionToSubmit.data.actionproof = {
-        ...res.proof.actionproof,
-        action: {
-          account: action.act.account,
-          name: action.act.name,
-          authorization: action.act.authorization,
-          data: action.act.hex_data
-        },
-        receipt: {
-          ...action.receipt,
-          auth_sequence: [{ account: action.receipt.auth_sequence[0][0], sequence: action.receipt.auth_sequence[0][1] }]
-        },
+      if (action) {
+        actionToSubmit.data.actionproof = {
+          ...res.proof.actionproof,
+          action: {
+            account: action.act.account,
+            name: action.act.name,
+            authorization: action.act.authorization,
+            data: action.act.hex_data
+          },
+          receipt: {
+            ...action.receipt,
+            auth_sequence: []
+          },
+        }
+        if(action.receipt.auth_sequence && action.receipt.auth_sequence.length){
+          for (var authSequence of action.receipt.auth_sequence)  actionToSubmit.data.actionproof.receipt.auth_sequence.push({
+            account: authSequence[0],
+            sequence: authSequence[1]
+          })
+        }
       }
 
       let blockproof = actionToSubmit.data.blockproof;
 
       //format timestamp in headers
-      for (var bftproof of blockproof.bftproof) bftproof.header.timestamp = bftproof.header.timestamp.slice(0,-1);
-
-      blockproof.blocktoprove.block.header.timestamp = blockproof.blocktoprove.block.header.timestamp.slice(0,-1);
+      for (var bftproof of blockproof.bftproof) bftproof.header.timestamp = convertDate(bftproof.header.timestamp) ;
+      blockproof.blocktoprove.block.header.timestamp = convertDate(blockproof.blocktoprove.block.header.timestamp);
 
       resolve(actionToSubmit);
+
+      function convertDate(timestamp){
+        //handle new ibc-prod server
+        if (timestamp.seconds){
+          let date = (new Date(parseInt(timestamp.seconds)*1000)).toISOString().replace('Z', '');
+          if (timestamp.nanos) date = date.replace('000', '500')
+          return date;
+        }
+        //old ibc server
+        else return timestamp.slice(0,-1);
+      }
     });
   });
 }
