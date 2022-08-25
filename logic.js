@@ -409,24 +409,7 @@ const getProof = ({type="heavyProof", block_to_prove, action}) => {
         }
       }
 
-      let blockproof = actionToSubmit.data.blockproof;
-
-      //format timestamp in headers
-      for (var bftproof of blockproof.bftproof) bftproof.header.timestamp = convertDate(bftproof.header.timestamp) ;
-      blockproof.blocktoprove.block.header.timestamp = convertDate(blockproof.blocktoprove.block.header.timestamp);
-
       resolve(actionToSubmit);
-
-      function convertDate(timestamp){
-        //handle new ibc-prod server
-        if (timestamp.seconds){
-          let date = (new Date(parseInt(timestamp.seconds)*1000)).toISOString().replace('Z', '');
-          if (timestamp.nanos) date = date.replace('000', '500')
-          return date;
-        }
-        //old ibc server
-        else return timestamp.slice(0,-1);
-      }
     });
   });
 }
