@@ -51,25 +51,25 @@
 <script>
   //chain Info;
   const chains = [{
-    chainId: 'df383d1cc33cbb9665538c604daac13706978566e17e5fd5f897eff68b88e1e4',
-    nodeUrl: 'https://eostestnet.goldenplatform.com',
-    name: "eostestnet",
-    label: "EOS Testnet",
-    proofSocket: "ws://195.201.60.252:17788",
-    bridgeContract:"bridge3",
-    wrapLockContractsArray: ["wlockandy2"],
+    chainId: '73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d',
+    nodeUrl: 'https://jungle4.api.eosnation.io',
+    name: "jungle4",
+    label: "Jungle 4 Testnet",
+    proofSocket: "ws://138.201.202.27:27788",
+    bridgeContract:"antelopeibc1",
+    wrapLockContractsArray: ["antelopewlk1"],
     session:null,
     wrapLockContracts: [],
     symbols:null,
     auth:null,
   },{
-    chainId: '83ce967e4a9876d2c050f859e710a58bb06f2d556843391ff28b0c1a95396402',
-    nodeUrl: 'https://uxtestnet.goldenplatform.com',
-    name: "uxtestnet",
-    label: "UX Testnet",
-    proofSocket: "ws://95.216.45.172:17788",
-    bridgeContract:"bridge3",
-    wrapLockContractsArray: ["wlockandy2"],
+    chainId: '5fff1dae8dc8e2fc4d5b23b2c7665c97f9e9d8edf2b6485a86ba311c25639191',
+    nodeUrl: 'https://api.kylin.alohaeos.com',
+    name: "kylin",
+    label: "Kylin Testnet",
+    proofSocket: "ws://138.201.202.27:7788",
+    bridgeContract:"antelopeibc1",
+    wrapLockContractsArray: ["antelopewlk1"],
     session:null,
     wrapLockContracts: [],
     symbols:null,
@@ -83,19 +83,41 @@
     //fetch wraplock contracts tokens & details
     for (var chain of chains) {
       for (var wrapLockContract of chain.wrapLockContractsArray) {
-        let details = (await $.post(`${chain.nodeUrl}/v1/chain/get_table_rows`, JSON.stringify({ json: true, code: wrapLockContract, scope: wrapLockContract, table: 'global'}))).rows[0];
-        if (details && details.bridge_contract === chain.bridgeContract) {
-          let symbolsres = await $.post(`${chain.nodeUrl}/v1/chain/get_table_by_scope`, JSON.stringify({ code: details.native_token_contract, table: 'stat'}));
+        const result = await Promise.all([
+          $.post(`${chain.nodeUrl}/v1/chain/get_table_rows`, JSON.stringify({ json: true, code: wrapLockContract, scope: wrapLockContract, table: 'global'})),
+          $.post(`${chain.nodeUrl}/v1/chain/get_table_rows`, JSON.stringify({ json: true, code: wrapLockContract, scope: wrapLockContract, table: 'contractmap'}))
+        ]);
+
+        const global = result[0].rows[0];
+        const contractMaps = result[1].rows;
+
+        for (var map of contractMaps){
+          let symbolsres = await $.post(`${chain.nodeUrl}/v1/chain/get_table_by_scope`, JSON.stringify({ code: map.native_token_contract, table: 'stat'}));
           let symbols = symbolsres.rows.map(r => toName(nameToUint64(r.scope)));
+          console.log("symbols",symbols)
           chain.wrapLockContracts.push({
-            chain_id: details.chain_id,
+            chain_id: global.chain_id,
             wrapLockContract,
-            nativeTokenContract: details.native_token_contract,
-            pairedChainId: details.paired_chain_id,
-            pairedWrapTokenContract: details.paired_wraptoken_contract,
+            nativeTokenContract: map.native_token_contract,
+            pairedChainId: global.paired_chain_id,
+            pairedWrapTokenContract: map.paired_wraptoken_contract,
             symbols
           });
+
         }
+
+        // if (global.bridge_contract === chain.bridgeContract) {
+        //   let symbolsres = await $.post(`${chain.nodeUrl}/v1/chain/get_table_by_scope`, JSON.stringify({ code: details.native_token_contract, table: 'stat'}));
+        //   let symbols = symbolsres.rows.map(r => toName(nameToUint64(r.scope)));
+        //   chain.wrapLockContracts.push({
+        //     chain_id: details.chain_id,
+        //     wrapLockContract,
+        //     nativeTokenContract: details.native_token_contract,
+        //     pairedChainId: details.paired_chain_id,
+        //     pairedWrapTokenContract: details.paired_wraptoken_contract,
+        //     symbols
+        //   });
+        // }
       }
     }
     //on DOM ready
@@ -222,7 +244,18 @@
       destinationChain.session.transact({actions: destinationActions}).then((result) => {
         console.log("result", result);
         $('#status').append(`<div style="margin-top:24px;"><a target="_blank" style="color:#1a8754" href="${destinationChain.nodeUrl}/tx/${result.processed.id}">TX ID<a></div>`);
-      }).catch(err=>{ console.log("Error submitting transaction", err); })
+      }).catch(async err=>{ 
+        console.log("Error submitting transaction", err); 
+        //TODO check type of error and if inline size, submit one by one
+        // try{
+        //   for (var action of destinationActions) {
+        //     let txRes = await destinationChain.session.transact({actions: [action]});
+        //     $('#status').append(`<div style="margin-top:24px;"><a target="_blank" style="color:#1a8754" href="${destinationChain.nodeUrl}/tx/${txRes.processed.id}">TX ID<a></div>`);
+        //   }
+        // }catch(ex){
+        //   console.log("Error submitting transaction", ex);
+        // }
+      })
     })
   }
 
@@ -320,12 +353,18 @@
     return new Promise(resolve=>{
       //initialize socket to proof server
       const ws = new WebSocket(sourceChain.proofSocket);
-
+      let prog = 1;
+      let progressInterval; 
       ws.addEventListener('open', (event) => {
         // connected to websocket server
         const query = { type, block_to_prove };
         if (action) query.action_receipt = action.receipt;
         ws.send(JSON.stringify(query));
+        
+        if (action) progressInterval = setInterval(()=>{
+          $('.progressDiv').last().html(prog +"%");
+          prog++
+        },2000)
       });
 
       //messages from websocket server
@@ -333,7 +372,10 @@
         const res = JSON.parse(event.data);
         //log non-progress messages from ibc server
         if (res.type !=='progress') console.log("Received message from ibc proof server", res);
-        if (res.type =='progress') $('.progressDiv').last().html(res.progress +"%");
+        if (res.type =='progress') {
+          if (progressInterval) clearInterval(progressInterval);
+          $('.progressDiv').last().html(res.progress +"%");
+        }
         if (res.type !=='proof') return;
         ws.close();
         $('.progressDiv').last().html("100%");
@@ -383,13 +425,6 @@
     }
   });
 
-  const issueWrappedToken = ({ tokenRow, destinationChain, action_receipt_digest }) => ({
-    account: tokenRow.pairedWrapTokenContract,
-    name: "issue",
-    authorization: [destinationChain.auth],
-    data: { caller: destinationChain.auth.actor, action_receipt_digest }
-  });
-
   const retireWrappedToken = ({ tokenRow, sourceChain, destinationChain, quantity }) => ({
     account: tokenRow.sourceTokenContract,
     name: "retire",
@@ -399,13 +434,6 @@
       quantity,
       beneficiary: destinationChain.auth.actor
     }
-  });
-
-  const withdrawNativetoken = ({ tokenRow, destinationChain, action_receipt_digest }) => ({
-    account: tokenRow.wrapLockContract,
-    name: "withdraw",
-    authorization: [destinationChain.auth],
-    data: { caller: destinationChain.auth.actor, action_receipt_digest }
   });
 
   //eosio name helper functions
@@ -440,7 +468,7 @@
   html,body{ background-color: #31313d; color:white; font-family: Verdana, Geneva, Tahoma, sans-serif; }
   .flexRow{ display: flex; align-items: center; justify-content: space-between;}
   label{ width:70px; text-align: left;color:white; }
-  .form-select, .form-control, button{ width:260px; }
+  .form-select, .form-control, button{ width:272px; }
   .form-select:disabled { background-color: #adafb2; }
   .box{ padding:16px; border:1px solid #64646d;margin-top:44px; }
   .box > div, #status > div{ display:flex; justify-content: space-between; }
