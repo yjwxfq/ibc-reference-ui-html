@@ -53,6 +53,7 @@
   const chains = [{
     chainId: '73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d',
     nodeUrl: 'https://jungle4.api.eosnation.io',
+    explorer: 'https://jungle4.eosq.eosnation.io',
     name: "jungle4",
     label: "Jungle 4 Testnet",
     proofSocket: "ws://138.201.202.27:27788",
@@ -65,6 +66,7 @@
   },{
     chainId: '5fff1dae8dc8e2fc4d5b23b2c7665c97f9e9d8edf2b6485a86ba311c25639191',
     nodeUrl: 'https://api.kylin.alohaeos.com',
+    explorer: 'https://kylin.eosq.eosnation.io',
     name: "kylin",
     label: "Kylin Testnet",
     proofSocket: "ws://138.201.202.27:7788",
@@ -243,7 +245,7 @@
 
       destinationChain.session.transact({actions: destinationActions}).then((result) => {
         console.log("result", result);
-        $('#status').append(`<div style="margin-top:24px;"><a target="_blank" style="color:#1a8754" href="${destinationChain.nodeUrl}/tx/${result.processed.id}">TX ID<a></div>`);
+        $('#status').append(`<div style="margin-top:24px;"><a target="_blank" style="color:#1a8754" href="${destinationChain.explorer}/tx/${result.processed.id}">TX ID<a></div>`);
       }).catch(async err=>{ 
         console.log("Error submitting transaction", err); 
         //TODO check type of error and if inline size, submit one by one
