@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>IBC reference UI</title>
+  <title>IBC Reference UI</title>
   <script src="https://code.jquery.com/jquery-3.6.0.min.js" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/anchor-link@3.5.1/lib/anchor-link.bundle.js"></script>
   <script src="https://unpkg.com/anchor-link-browser-transport@3.5.1/lib/anchor-link-browser-transport.bundle.js"></script>
@@ -12,7 +12,7 @@
 
 <body style="max-width:640px;margin:40px auto;">
   <div class="container" style="border:1px solid #64646d;padding:24px;">
-    <h3 class="text-center">IBC</h3>
+    <h3 class="text-center">IBC DEMO</h3>
     <div class="flexRow"  style="margin-top:24px;">
       <select onchange="sourceChainChanged(this.value)" class="form-select chainSelect" id="sourceChain">
         <option value="" disabled selected>Select Chain</option>
@@ -39,12 +39,7 @@
       </div>
       <button id="transferBtn" onclick="transfer()" disabled type="button" class="btn btn-primary">Transfer and Prove</button>
     </div>
-    <div class="box">
-      <div>Destination chain Bridge Schedule Version: <span id="lastProven"></span></div>
-      <div>Source chain Active Schedule Version: <span id="activeSchedule"></span></div>
-      <div>Source chain Pending Schedule: <span id="pendingSchedule"></span></div>
-      <section id="status" style="margin-top:24px"></section>
-    </div>
+    <div class="box"><section id="status"></section></div>
   </div>
 </body>
 
@@ -107,21 +102,7 @@
             pairedWrapTokenContract: map.paired_wraptoken_contract,
             symbols
           });
-
         }
-
-        // if (global.bridge_contract === chain.bridgeContract) {
-        //   let symbolsres = await $.post(`${chain.nodeUrl}/v1/chain/get_table_by_scope`, JSON.stringify({ code: details.native_token_contract, table: 'stat'}));
-        //   let symbols = symbolsres.rows.map(r => toName(nameToUint64(r.scope)));
-        //   chain.wrapLockContracts.push({
-        //     chain_id: details.chain_id,
-        //     wrapLockContract,
-        //     nativeTokenContract: details.native_token_contract,
-        //     pairedChainId: details.paired_chain_id,
-        //     pairedWrapTokenContract: details.paired_wraptoken_contract,
-        //     symbols
-        //   });
-        // }
       }
     }
     //on DOM ready
@@ -136,15 +117,11 @@
 
   //handler for source chain change
   const sourceChainChanged = val =>{
-
     sourceChain = chains.find(c=>c.name==val);
     destinationChain = chains.find(c=>c.name !== val);
     $("#destinationChain").val(destinationChain.name);
     $('#sourceLogin').show();
     $('#destinationLogin').show();
-    $('#lastProven').html("");
-    $('#activeSchedule').html("");
-    $('#pendingSchedule').html("");
     $('#status').html("");
 
     //set sourceChain symbols if not yet set
@@ -226,7 +203,7 @@
     console.log("signedTx",signedTx)
     if (!signedTx || !signedTx.signatures) return $('#status').append(`<div>Error Signing Transaction</div>`);
 
-    $('#status').append(`<div><div>Pushing TX to irreversible block</div><div class="progressDiv"></div></div>`);
+    $('#status').append(`<div><div>Pushing TX to irreversible block</div><div class="progressDiv">0%</div></div>`);
 
     let prog = 0;
     let progressInterval = setInterval(()=>{
@@ -240,7 +217,7 @@
       console.log(result) // processed tx of transfer/retire
 
       let emitxferAction = result.processed.action_traces.find(r=>r.act.name==='emitxfer'); //if flattened traces (e.g. nodeos v3.1)
-      if (!emitxferAction){ //if api returns inline traces within acton_trace
+      if (!emitxferAction){ //if api returns inline traces within action_trace
         const lockActionTrace = result.processed.action_traces.find(r=>r.act.name==='transfer' || r.act.name==='retire');
         emitxferAction = lockActionTrace.inline_traces.find(r=>r.act.name==='emitxfer');
       }
@@ -249,8 +226,8 @@
       //Get schedule proofs;
       const scheduleProofs = await getScheduleProofs(result.processed.block_num);
       console.log("scheduleProofs",scheduleProofs)
-      if (!scheduleProofs) return  $('#status').append(`<div><div>Error, no scheduleProofs</div><div class="progressDiv"></div>`);
-      $('#status').append(`<div><div>Fetching proof for emitxfer...</div><div class="progressDiv"></div>`);
+      if (!scheduleProofs) return  $('#status').append(`<div><div>Error, no scheduleProofs</div><div class="progressDiv"></div></div>`);
+      $('#status').append(`<div><div>Fetching proof for emitxfer...</div><div class="progressDiv">0%</div></div>`);
       
       const emitxferProof = await getProof({
         type: "heavyProof",
@@ -262,13 +239,23 @@
       //submit proof to destination chain's bridge contract
       let destinationActions = [...scheduleProofs, emitxferProof];
       console.log("destinationActions",destinationActions)
-      $('#status').append(`<div>Submitting Proofs</div>`);
-
+      $('#status').append(`<div><div>Submitting Proofs</div><div class="progressDiv">0%</div></div>`);
       let signedDestinationTx = await destinationChain.session.transact({actions: destinationActions}, {broadcast:false, expireSeconds:120, blocksBehind:3});
+      $('.progressDiv').last().html("50%");
+
+      if (!signedDestinationTx || !signedDestinationTx.signatures) return $('#status').append(`<div>Error Signing Transaction</div>`);
+
       submitTx(signedDestinationTx, destinationChain, 2 ).then( async result => {
+        $('.progressDiv').last().html("100%");
         console.log("result", result);
         $('#status').append(`<div style="margin-top:24px;"><a target="_blank" style="color:#1a8754" href="${destinationChain.explorer}/tx/${result.processed.id}">TX ID<a></div>`);
-      }).catch(async err=>{ console.log("Error signing tx", err) })
+      }).catch(async err=>{
+        $('.progressDiv').last().html("Error");
+        console.log("Error pushing proof", err);
+        if(progressInterval) clearInterval(progressInterval);
+        $('#status').append(`<div>Error Submitting Proof: </div>`);
+        $('#status').append(`${err2.responseJSON.error.details[0].message}</div>`);
+      })
     })
     .catch(err2=>{
       console.log("Error submitting transaction", err2); 
@@ -329,21 +316,21 @@
     var last_proven_schedule_version = 0;
     if (bridgeScheduleData.rows.length > 0) last_proven_schedule_version = bridgeScheduleData.rows[0].producer_schedule.version;
     if (!last_proven_schedule_version) return console.log('No Schedule Found in Contract!');
+    console.log("Last proved source schedule:",last_proven_schedule_version);
 
     let schedule = (await $.get(sourceChain.nodeUrl+ '/v1/chain/get_producer_schedule'));
     var schedule_version = parseInt(schedule.active.version);
+    console.log("Source active schedule:",schedule_version);
+    console.log("Pending schedule:", schedule.pending?'True':'False')
 
-    //update UI schedule status
-    $("#lastProven").html("v"+last_proven_schedule_version);
-    $("#activeSchedule").html("v"+schedule_version);
-    if (schedule.pending) $('#pendingSchedule').html("YES"); else $('#pendingSchedule').html("NO"); 
 
     let schedule_block = transferBlock + 0;
     while (schedule_version > last_proven_schedule_version) {
-      $('#status').append(`<div><div>Locating block header with producer schedule (v${schedule_version})...</div><div class="progressDiv"></div>`);
+      $('#status').append(`<div><div>Locating block header with producer schedule (v${schedule_version})...</div><div class="progressDiv">0%</div></div>`);
       let block_num = await getProducerScheduleBlock(schedule_block);
       if (!block_num) return; //should never occur
-      $('#status').append(`<div><div>Fetching proof for active schedule (v${schedule_version})...</div><div class="progressDiv"></div>`);
+      $('.progressDiv').last().html("100%");
+      $('#status').append(`<div><div>Fetching proof for active schedule (v${schedule_version})...</div><div class="progressDiv">0%</div></div>`);
       var proof = await getProof({block_to_prove: block_num});
       schedule_version = proof.data.blockproof.blocktoprove.block.header.schedule_version;
       schedule_block = block_num;
@@ -352,7 +339,7 @@
 
     // check for pending schedule and prove pending schedule if found;
     if (schedule.pending) {
-      $('#status').append(`<div><div>Fetching proof for pending schedule...</div><div class="progressDiv"></div>`);
+      $('#status').append(`<div><div>Fetching proof for pending schedule...</div><div class="progressDiv">0%</div>`);
 
       let newPendingBlockHeader=null;
       let currentBlock = transferBlock + 0;
