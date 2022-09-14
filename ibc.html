@@ -223,8 +223,9 @@
     
     //sign tx w/o broadcasting
     const signedTx = await sourceChain.session.transact({actions: sourceActions}, {broadcast:false, expireSeconds:120, blocksBehind:3});
-    console.log("signedTX",signedTx)
-    if (!signedTx.signatures) return;
+    console.log("signedTx",signedTx)
+    if (!signedTx || !signedTx.signatures) return $('#status').append(`<div>Error Signing Transaction</div>`);
+
     $('#status').append(`<div><div>Pushing TX to irreversible block</div><div class="progressDiv"></div></div>`);
 
     let prog = 0;
@@ -263,16 +264,17 @@
       console.log("destinationActions",destinationActions)
       $('#status').append(`<div>Submitting Proofs</div>`);
 
-      const signedDestinationTx = await destinationChain.session.transact({actions: destinationActions}, {broadcast:false, expireSeconds:120, blocksBehind:3});
+      let signedDestinationTx = await destinationChain.session.transact({actions: destinationActions}, {broadcast:false, expireSeconds:120, blocksBehind:3});
       submitTx(signedDestinationTx, destinationChain, 2 ).then( async result => {
         console.log("result", result);
         $('#status').append(`<div style="margin-top:24px;"><a target="_blank" style="color:#1a8754" href="${destinationChain.explorer}/tx/${result.processed.id}">TX ID<a></div>`);
-      }).catch(async err=>{ 
-        console.log("Error submitting transaction", err); 
-        if(progressInterval) clearInterval(progressInterval);
-        $('#status').append(`<div>Error Submitting Proofs: </div>`);
-        $('#status').append(`${err.responseJSON.error.details[0].message}</div>`);
-      })
+      }).catch(async err=>{ console.log("Error signing tx", err) })
+    })
+    .catch(err2=>{
+      console.log("Error submitting transaction", err2); 
+      if(progressInterval) clearInterval(progressInterval);
+      $('#status').append(`<div>Error Submitting Transaction: </div>`);
+      $('#status').append(`${err2.responseJSON.error.details[0].message}</div>`);
     })
   }
 
