@@ -63,6 +63,7 @@
     wrapLockContracts: [],
     symbols:null,
     auth:null,
+    version:3.1 //Can fetch from get_info
   },{
     chainId: '5fff1dae8dc8e2fc4d5b23b2c7665c97f9e9d8edf2b6485a86ba311c25639191',
     nodeUrl: 'https://kylin.api.eosnation.io',
@@ -76,6 +77,7 @@
     wrapLockContracts: [],
     symbols:null,
     auth:null,
+    version:3.1 //Can fetch from get_info
   }];
 
   let sourceChain, destinationChain, tokenRow, progress;
@@ -177,7 +179,7 @@
   }
 
   //UI functions
-  function login(type){
+  const login = type => {
     const chain =  chains.find(c=>c.name===$(`#${type}Chain`).val());
     const link = new AnchorLink({
       transport: new AnchorLinkBrowserTransport(),
@@ -196,7 +198,7 @@
       .catch(ex=> alert(ex));
   }
 
-  function logout(type){
+  const logout = type => {
     const chain =  chains.find(c=>c.name===$(`#${type}Chain`).val());
     chain.session?.remove();
     chain.session = null;
@@ -217,7 +219,6 @@
     let sourceActions;
     if (tokenRow.native) sourceActions = [ transferToken({ tokenRow, sourceChain, destinationChain, quantity })]; //transfer token to the wraplock token
     else sourceActions = [ retireWrappedToken({ tokenRow, sourceChain, destinationChain, quantity }) ]; //retire tokens from a non-native chain
-
     console.log("sourceActions",sourceActions)
     
     //sign tx w/o broadcasting
@@ -230,19 +231,9 @@
     let progressInterval = setInterval(()=>{
       prog = Math.min(prog +1, 100);
       $('.progressDiv').last().html(prog +"%");
-    }, 1700)
+    }, 1700);
     
-    //push tx and wait for block to be irrreversible
-    $.post(`${sourceChain.nodeUrl}/v1/chain/send_transaction2`, JSON.stringify({
-      return_failure_trace: false,
-      retry_trx: true,
-      transaction: {
-        signatures: signedTx.signatures,
-        compression: signedTx.compression || false,
-        packed_trx: arrayToHex(signedTx.resolved.serializedTransaction),
-        packed_context_free_data: null
-      }
-    })).then( async result => {
+    submitTx(signedTx, sourceChain ).then( async result => {
       clearInterval(progressInterval); //clear progress interval
       $('.progressDiv').last().html("100%");
       console.log(result) // processed tx of transfer/retire
@@ -273,17 +264,7 @@
       $('#status').append(`<div>Submitting Proofs</div>`);
 
       const signedDestinationTx = await destinationChain.session.transact({actions: destinationActions}, {broadcast:false, expireSeconds:120, blocksBehind:3});
-      $.post(`${destinationChain.nodeUrl}/v1/chain/send_transaction2`, JSON.stringify({
-        return_failure_trace: false,
-        retry_trx: true,
-        retry_trx_num_blocks:2, //if not specified, it defaults to LIB
-        transaction: {
-          signatures: signedDestinationTx.signatures,
-          compression: signedDestinationTx.compression || false,
-          packed_trx: arrayToHex(signedDestinationTx.resolved.serializedTransaction),
-          packed_context_free_data: null
-        }
-      })).then( async result => {
+      submitTx(signedDestinationTx, destinationChain, 2 ).then( async result => {
         console.log("result", result);
         $('#status').append(`<div style="margin-top:24px;"><a target="_blank" style="color:#1a8754" href="${destinationChain.explorer}/tx/${result.processed.id}">TX ID<a></div>`);
       }).catch(async err=>{ 
@@ -434,6 +415,30 @@
     });
   }
 
+  const submitTx = (signedTx, chain, retry_trx_num_blocks=null) => {
+    let mandel = chain.version >=3;
+    let url = `${chain.nodeUrl}/v1/chain/send_transaction`;
+    let obj = {
+      transaction: {
+        signatures: signedTx.signatures,
+        compression: signedTx.compression || false,
+        packed_trx: arrayToHex(signedTx.resolved.serializedTransaction),
+        packed_context_free_data: null
+      }
+    }
+    if (mandel){
+      url+='2'; //use send transaction2 if available
+      obj = {
+        ...obj,
+        return_failure_trace: false,
+        retry_trx: true,
+        retry_trx_num_blocks, //if not specified, it defaults to LIB
+      }
+    }
+    return $.post(url, JSON.stringify(obj));
+  }
+
+
   //action creation functions
   const transferToken = ({tokenRow, sourceChain, destinationChain, quantity} ) => ({
     account: tokenRow.nativeTokenContract,
@@ -450,14 +455,14 @@
   });
 
   //eosio name helper functions
-  const char_to_symbol = (c) => {
+  const char_to_symbol = c => {
     if (typeof c == 'string') c = c.charCodeAt(0);
     if (c >= 'a'.charCodeAt(0) && c <= 'z'.charCodeAt(0)) return c - 'a'.charCodeAt(0) + 6;
     if (c >= '1'.charCodeAt(0) && c <= '5'.charCodeAt(0)) return c - '1'.charCodeAt(0) + 1;
     return 0;
   };
 
-  const toName = (value) => {
+  const toName = value => {
     let v = BigInt.asUintN(64, value), result = '';
     while (v > 0) {
       const c = v & BigInt(0xff);
@@ -467,14 +472,14 @@
     return result;
   };
 
-  const nameToUint64 = (s) => {
+  const nameToUint64 = s => {
     let n = 0n, i = 0;
     for (; i < 12 && s[i]; i++) n |= BigInt(char_to_symbol(s.charCodeAt(i)) & 0x1f) << BigInt(64 - 5 * (i + 1));
     if (i == 12) n |= BigInt(char_to_symbol(s.charCodeAt(i)) & 0x0f);
     return n.toString();
   };
 
-  function arrayToHex(data){
+  const arrayToHex = data => {
     let result = '';
     for (const x of data)  result += ('00' + x.toString(16)).slice(-2);
     return result.toUpperCase();
