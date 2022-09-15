@@ -261,8 +261,9 @@
       //Get schedule proofs;
       const scheduleProofs = await getScheduleProofs(result.processed.block_num);
       console.log("scheduleProofs",scheduleProofs)
-      if (!scheduleProofs) return  $('#status').append(`<div><div>Error, no scheduleProofs</div><div class="progressDiv"></div></div>`);
-      $('#status').append(`<div><div>Fetching proof for emitxfer...</div><div class="progressDiv">0%</div></div>`);
+      if (!scheduleProofs) return  $('#status').append(`<div><div>Error, no schedule proofs</div><div class="progressDiv"></div></div>`);
+
+      $('#status').append(`<div><div>Fetching proof for interchain transfer</div><div class="progressDiv">0%</div></div>`);
       
       const emitxferProof = await getProof({
         type: "heavyProof",
@@ -274,11 +275,11 @@
       //submit proof to destination chain's bridge contract
       let destinationActions = [...scheduleProofs, emitxferProof];
       console.log("destinationActions",destinationActions)
-      $('#status').append(`<div><div>Submitting Proofs</div><div class="progressDiv">0%</div></div>`);
+      $('#status').append(`<div><div>Submitting proof(s)</div><div class="progressDiv">0%</div></div>`);
       const signedDestinationTx = await destinationChain.session.transact({actions: destinationActions}, {broadcast:false, expireSeconds:360, blocksBehind:3});
       $('.progressDiv').last().html("50%");
 
-      if (!signedDestinationTx || !signedDestinationTx.signatures) return $('#status').append(`<div>Error Signing Transaction</div>`);
+      if (!signedDestinationTx || !signedDestinationTx.signatures) return $('#status').append(`<div>Error signing TX</div>`);
 
       submitTx(signedDestinationTx, destinationChain, 2 ).then( async result => {
         $('.progressDiv').last().html("100%");
@@ -289,15 +290,15 @@
         $('.progressDiv').last().html("Error");
         console.log("Error pushing proof", err);
         if(progressInterval) clearInterval(progressInterval);
-        $('#status').append(`<br><div>Error Submitting Proof: </div>`);
+        $('#status').append(`<br><div>Error submitting proof(s): </div>`);
         $('#status').append(`${err.responseJSON.error.details[0].message}</div>`);
         $('#resetBtn').show();
       })
     })
     .catch(err2=>{
-      console.log("Error submitting transaction", err2); 
+      console.log("Error submitting TX", err2); 
       if(progressInterval) clearInterval(progressInterval);
-      $('#status').append(`<br><div>Error Submitting Transaction: </div>`);
+      $('#status').append(`<br><div>Error submitting TX: </div>`);
       $('#status').append(`${err2.responseJSON.error.details[0].message}</div>`);
       $('#resetBtn').show();
     })
@@ -364,11 +365,11 @@
 
     let schedule_block = transferBlock + 0;
     while (schedule_version > last_proven_schedule_version) {
-      $('#status').append(`<div><div>Locating block header with producer schedule (v${schedule_version})...</div><div class="progressDiv">0%</div></div>`);
+      $('#status').append(`<div><div>Locating block header with producer schedule (v${schedule_version})</div><div class="progressDiv">0%</div></div>`);
       let block_num = await getProducerScheduleBlock(schedule_block);
       if (!block_num) return; //should never occur
       $('.progressDiv').last().html("100%");
-      $('#status').append(`<div><div>Fetching proof for active schedule (v${schedule_version})...</div><div class="progressDiv">0%</div></div>`);
+      $('#status').append(`<div><div>Fetching proof for active schedule (v${schedule_version})</div><div class="progressDiv">0%</div></div>`);
       var proof = await getProof({block_to_prove: block_num});
       schedule_version = proof.data.blockproof.blocktoprove.block.header.schedule_version;
       schedule_block = block_num;
@@ -377,7 +378,7 @@
 
     // check for pending schedule and prove pending schedule if found;
     if (schedule.pending) {
-      $('#status').append(`<div><div>Fetching proof for pending schedule...</div><div class="progressDiv">0%</div>`);
+      $('#status').append(`<div><div>Fetching proof for pending schedule</div><div class="progressDiv">0%</div>`);
 
       let newPendingBlockHeader=null;
       let currentBlock = transferBlock + 0;
