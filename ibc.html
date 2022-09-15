@@ -30,7 +30,7 @@
     <hr>
     <div class="flexRow" style="margin-top:48px;">
       <div class="input-group"  style="width:260px;">
-        <input id="amount" placeholder="Amount" type="number"class="form-control"></input>
+        <input id="amount" placeholder="Amount" min="0.0001" step="0.0001" type="number"class="form-control"></input>
         <div class="input-group-prepend">
           <select style="width:120px;" class="form-select tokenSelect" id="sourceAsset">
             <option value="" disabled selected>Token</option>
@@ -39,7 +39,10 @@
       </div>
       <button id="transferBtn" onclick="transfer()" disabled type="button" class="btn btn-primary">Transfer and Prove</button>
     </div>
-    <div class="box"><section id="status"></section></div>
+    <div class="box"><section id="status">
+      <div><div>Fetching tokens available for IBC</div><div class="progressDiv">0%</div></div>
+    </section></div>
+    <div style="text-align:center;margin-top:24px;"><button id="resetBtn" onclick="reset()" style="display:none;" type="button" class="btn btn-primary">New Transfer</button></div>
   </div>
 </body>
 
@@ -47,7 +50,7 @@
   //chain Info;
   const chains = [{
     chainId: '73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d',
-    nodeUrl: 'https://jungle4.api.eosnation.io',
+    nodeUrl: 'https://jungle4.api.eosnation.io', //api supporting send_transaction2
     explorer: 'https://jungle4.eosq.eosnation.io',
     name: "jungle4",
     label: "Jungle 4 Testnet",
@@ -61,7 +64,7 @@
     version:3.1 //Can fetch from get_info
   },{
     chainId: '5fff1dae8dc8e2fc4d5b23b2c7665c97f9e9d8edf2b6485a86ba311c25639191',
-    nodeUrl: 'https://kylin.api.eosnation.io',
+    nodeUrl: 'https://kylin.api.eosnation.io', //api supporting send_transaction2
     explorer: 'https://kylin.eosq.eosnation.io',
     name: "kylin",
     label: "Kylin Testnet",
@@ -75,7 +78,7 @@
     version:3.1 //Can fetch from get_info
   }];
 
-  let sourceChain, destinationChain, tokenRow, progress;
+  let sourceChain, destinationChain, tokenRow, fetchProgress=0;
   fetchTokens();
 
   async function fetchTokens(){
@@ -86,6 +89,8 @@
           $.post(`${chain.nodeUrl}/v1/chain/get_table_rows`, JSON.stringify({ json: true, code: wrapLockContract, scope: wrapLockContract, table: 'global'})),
           $.post(`${chain.nodeUrl}/v1/chain/get_table_rows`, JSON.stringify({ json: true, code: wrapLockContract, scope: wrapLockContract, table: 'contractmap'}))
         ]);
+        fetchProgress+=25;
+        $('.progressDiv').last().html(fetchProgress +"%");
 
         const global = result[0].rows[0];
         const contractMaps = result[1].rows;
@@ -93,7 +98,7 @@
         for (var map of contractMaps){
           let symbolsres = await $.post(`${chain.nodeUrl}/v1/chain/get_table_by_scope`, JSON.stringify({ code: map.native_token_contract, table: 'stat'}));
           let symbols = symbolsres.rows.map(r => toName(nameToUint64(r.scope)));
-          console.log("symbols",symbols)
+          console.log(chain.name, "tokens",symbols)
           chain.wrapLockContracts.push({
             chain_id: global.chain_id,
             wrapLockContract,
@@ -103,6 +108,8 @@
             symbols
           });
         }
+        fetchProgress+=25;
+        $('.progressDiv').last().html(fetchProgress +"%");
       }
     }
     //on DOM ready
@@ -122,7 +129,7 @@
     $("#destinationChain").val(destinationChain.name);
     $('#sourceLogin').show();
     $('#destinationLogin').show();
-    $('#status').html("");
+    $('#status').html("<div><div>Fetching tokens available for IBC</div><div class='progressDiv'>100%</div></div>");
 
     //set sourceChain symbols if not yet set
     if (!sourceChain.symbols) {
@@ -186,6 +193,25 @@
     $(`#transferBtn`).prop('disabled', chains.map(r=>r.session).includes(null));
   }
 
+  const lock = () => {
+    $(`#transferBtn`).prop('disabled', true);
+    $(`#sourceLogout`).prop('disabled', true);
+    $(`#destinationLogout`).prop('disabled', true);
+    $(`#sourceAsset`).prop('disabled', true);
+    $(`#amount`).prop('disabled', true);
+  }
+
+  const reset = () =>{
+    $('#resetBtn').hide();
+    $('#status').html("<div><div>Fetching tokens available for IBC</div><div class='progressDiv'>100%</div></div>");
+    $(`#transferBtn`).prop('disabled', false);
+    $(`#sourceLogout`).prop('disabled', false);
+    $(`#destinationLogout`).prop('disabled', false);
+    $(`#sourceAsset`).prop('disabled', false);
+    $(`#amount`).prop('disabled', false);
+  }
+
+
   //transfer function to lock or retire tokens
   const transfer = async () => {
     //get values form UI
@@ -198,13 +224,22 @@
     else sourceActions = [ retireWrappedToken({ tokenRow, sourceChain, destinationChain, quantity }) ]; //retire tokens from a non-native chain
     console.log("sourceActions",sourceActions)
     
+    lock();
     //sign tx w/o broadcasting
-    const signedTx = await sourceChain.session.transact({actions: sourceActions}, {broadcast:false, expireSeconds:120, blocksBehind:3});
-    console.log("signedTx",signedTx)
-    if (!signedTx || !signedTx.signatures) return $('#status').append(`<div>Error Signing Transaction</div>`);
+    let signedTx;
+    try{
+      signedTx = await sourceChain.session.transact({actions: sourceActions}, {broadcast:false, expireSeconds:360, blocksBehind:3});
+      console.log("signedTx",signedTx)
+    }catch(ex){
+      $('#resetBtn').show();
+      console.log("ex", ex)
+      $('#status').append("<br>");
+      $('#status').append(ex);
+      return 
+    }
 
-    $('#status').append(`<div><div>Pushing TX to irreversible block</div><div class="progressDiv">0%</div></div>`);
-
+    $('#status').append(`<div><div>Waiting for TX irreversibility</div><div class="progressDiv">0%</div></div>`);
+                                                  
     let prog = 0;
     let progressInterval = setInterval(()=>{
       prog = Math.min(prog +1, 100);
@@ -240,7 +275,7 @@
       let destinationActions = [...scheduleProofs, emitxferProof];
       console.log("destinationActions",destinationActions)
       $('#status').append(`<div><div>Submitting Proofs</div><div class="progressDiv">0%</div></div>`);
-      let signedDestinationTx = await destinationChain.session.transact({actions: destinationActions}, {broadcast:false, expireSeconds:120, blocksBehind:3});
+      const signedDestinationTx = await destinationChain.session.transact({actions: destinationActions}, {broadcast:false, expireSeconds:360, blocksBehind:3});
       $('.progressDiv').last().html("50%");
 
       if (!signedDestinationTx || !signedDestinationTx.signatures) return $('#status').append(`<div>Error Signing Transaction</div>`);
@@ -249,19 +284,22 @@
         $('.progressDiv').last().html("100%");
         console.log("result", result);
         $('#status').append(`<div style="margin-top:24px;"><a target="_blank" style="color:#1a8754" href="${destinationChain.explorer}/tx/${result.processed.id}">TX ID<a></div>`);
+        $('#resetBtn').show();
       }).catch(async err=>{
         $('.progressDiv').last().html("Error");
         console.log("Error pushing proof", err);
         if(progressInterval) clearInterval(progressInterval);
-        $('#status').append(`<div>Error Submitting Proof: </div>`);
-        $('#status').append(`${err2.responseJSON.error.details[0].message}</div>`);
+        $('#status').append(`<br><div>Error Submitting Proof: </div>`);
+        $('#status').append(`${err.responseJSON.error.details[0].message}</div>`);
+        $('#resetBtn').show();
       })
     })
     .catch(err2=>{
       console.log("Error submitting transaction", err2); 
       if(progressInterval) clearInterval(progressInterval);
-      $('#status').append(`<div>Error Submitting Transaction: </div>`);
+      $('#status').append(`<br><div>Error Submitting Transaction: </div>`);
       $('#status').append(`${err2.responseJSON.error.details[0].message}</div>`);
+      $('#resetBtn').show();
     })
   }
 
