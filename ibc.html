@@ -238,7 +238,7 @@
       return 
     }
 
-    $('#status').append(`<div><div>Waiting for TX irreversibility</div><div class="progressDiv">0%</div></div>`);
+    $('#status').append(`<div><div>Waiting for TX irreversibility <span id="lockTx" style="margin-left:12px"></span></div><div class="progressDiv">0%</div></div>`);
                                                   
     let prog = 0;
     let progressInterval = setInterval(()=>{
@@ -249,6 +249,7 @@
     submitTx(signedTx, sourceChain ).then( async result => {
       clearInterval(progressInterval); //clear progress interval
       $('.progressDiv').last().html("100%");
+      $('#lockTx').html(`<a target="_blank" style="color:#1a8754" href="${sourceChain.explorer}/tx/${result.processed.id}">Lock TX<a>`)
       console.log(result) // processed tx of transfer/retire
 
       let emitxferAction = result.processed.action_traces.find(r=>r.act.name==='emitxfer'); //if flattened traces (e.g. nodeos v3.1)
@@ -275,7 +276,7 @@
       //submit proof to destination chain's bridge contract
       let destinationActions = [...scheduleProofs, emitxferProof];
       console.log("destinationActions",destinationActions)
-      $('#status').append(`<div><div>Submitting proof(s)</div><div class="progressDiv">0%</div></div>`);
+      $('#status').append(`<div><div>Submitting proof(s)<span id="proofTx" style="margin-left:12px"></span></div> <div class="progressDiv">0%</div></div>`);
       const signedDestinationTx = await destinationChain.session.transact({actions: destinationActions}, {broadcast:false, expireSeconds:360, blocksBehind:3});
       $('.progressDiv').last().html("50%");
 
@@ -284,7 +285,9 @@
       submitTx(signedDestinationTx, destinationChain, 2 ).then( async result => {
         $('.progressDiv').last().html("100%");
         console.log("result", result);
-        $('#status').append(`<div style="margin-top:24px;"><a target="_blank" style="color:#1a8754" href="${destinationChain.explorer}/tx/${result.processed.id}">TX ID<a></div>`);
+        $('#proofTx').html(`<a target="_blank" style="color:#1a8754" href="${destinationChain.explorer}/tx/${result.processed.id}">Proof TX<a>`)
+
+        // $('#status').append(`<div style="margin-top:24px;"><a target="_blank" style="color:#1a8754" href="${destinationChain.explorer}/tx/${result.processed.id}">TX ID<a></div>`);
         $('#resetBtn').show();
       }).catch(async err=>{
         $('.progressDiv').last().html("Error");
