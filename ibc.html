@@ -249,7 +249,7 @@
     submitTx(signedTx, sourceChain ).then( async result => {
       clearInterval(progressInterval); //clear progress interval
       $('.progressDiv').last().html("100%");
-      $('#lockTx').html(`<a target="_blank" style="color:#1a8754" href="${sourceChain.explorer}/tx/${result.processed.id}">Lock TX<a>`)
+      $('#lockTx').html(`<a target="_blank" style="color:#1a8754" href="${sourceChain.explorer}/tx/${result.processed.id}">${tokenRow.native?'Lock TX':'Retire TX'}<a>`)
       console.log(result) // processed tx of transfer/retire
 
       let emitxferAction = result.processed.action_traces.find(r=>r.act.name==='emitxfer'); //if flattened traces (e.g. nodeos v3.1)
