@@ -57,7 +57,6 @@
     proofSocket: "wss://wax-testnet-ibc.goldenplatform.com",
     bridgeContract:"antelopeibc2",
     wrapLockContractsArray: ["antelopewlk1", "antelopewlk2", "antelopewlk3", "antelopewlk4"],
-    decimals:8
   },{
     chainId: '1eaa0824707c8c16bd25145493bf062aecddfeb56c736f6ba6397f3195f33c9f',
     nodeUrl: 'https://test.telos.eosusa.io',
@@ -130,6 +129,7 @@
     for (var result of groupedResults){
       const global = result[0][0];
       const contractMaps = result[1];
+
       for (var map of contractMaps){
         const chain = chains.find(c=>c.chainId === global.chain_id);
         if (!chain) continue;
@@ -137,7 +137,6 @@
       }
     }
     const tokenResults = await Promise.all(tokenPromises);
-
     let tokenResultsIndex = 0;
     for (var result of groupedResults){
       const global = result[0][0];
@@ -210,7 +209,6 @@
     sourceChain.symbols = [...nativeList, ...wrappedList];
 
     
-
     //set Token select options
     let optionsHtml = `<optgroup label="Native">`
     for (var r of sourceChain.symbols.filter(r=>r.native)) optionsHtml+=`<option value=${r.id}>${r.symbol}</option>`;
@@ -279,8 +277,20 @@
     //get values form UI
     tokenRow = sourceChain.symbols.find(r=>r.id===parseInt($('#sourceAsset').val()));
     let amount = parseFloat($("#amount").val());
-    const quantity = `${amount.toFixed(sourceChain.decimals||4)} ${tokenRow.symbol}`;
     
+    //fetch token decimal places from native chain 
+    const statChain = chains.find(r=>r.chainId===tokenRow.chain_id);
+    const statResult = await $.post(`${statChain.nodeUrl}/v1/chain/get_table_rows`, JSON.stringify({
+      json: true,
+      code: tokenRow.nativeTokenContract,
+      scope: tokenRow.symbol,
+      table: 'stat',
+      limit:1
+    })) 
+    const decimals = statResult.rows[0].supply.split('.')[1].split(' ')[0].length;
+    console.log("decimals",decimals)
+
+    const quantity = `${amount.toFixed(decimals)} ${tokenRow.symbol}`;
     let sourceActions;
     if (tokenRow.native) sourceActions = [ transferToken({ tokenRow, sourceChain, destinationChain, quantity })]; //transfer token to the wraplock token
     else sourceActions = [ retireWrappedToken({ tokenRow, sourceChain, destinationChain, quantity }) ]; //retire tokens from a non-native chain
