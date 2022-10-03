@@ -446,8 +446,11 @@
     console.log("Source active schedule:",schedule_version);
     console.log("Pending schedule:", schedule.pending?'True':'False')
 
+    let head = (await $.get(sourceChain.nodeUrl+ '/v1/chain/get_info')).head_block_num;
 
-    let schedule_block = transferBlock + 0;
+
+    let schedule_block = head + 0;
+    console.log("head",head)
     while (schedule_version > last_proven_schedule_version) {
       $('#status').append(`<div><div>Locating block header with producer schedule (v${schedule_version})</div><div class="progressDiv">0%</div></div>`);
       let block_num = await getProducerScheduleBlock(schedule_block);
