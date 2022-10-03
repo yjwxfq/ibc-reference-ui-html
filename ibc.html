@@ -14,11 +14,11 @@
   <div class="container" style="border:1px solid #64646d;padding:24px;">
     <h3 class="text-center">IBC DEMO</h3>
     <div class="flexRow"  style="margin-top:24px;">
-      <select onchange="sourceChainChanged(this.value)" class="form-select chainSelect" id="sourceChain">
-        <option value="" disabled selected>Select Chain</option>
+      <select onchange="chainChanged()" class="form-select chainSelect" id="sourceChain">
+        <option value="" disabled selected>Select Source Chain</option>
       </select>
-      <select class="form-select chainSelect" id="destinationChain" disabled>
-        <option value="" disabled selected></option>
+      <select  onchange="chainChanged()" class="form-select chainSelect" id="destinationChain">
+        <option value="" disabled selected>Select Destination Chain</option>
       </select>
     </div>
     <div class="flexRow" style="margin-top:24px;">
@@ -49,69 +49,120 @@
 <script>
   //chain Info;
   const chains = [{
+    chainId: 'f16b1833c747c43682f4386fca9cbb327929334a762755ebec17f6f23c9b8a12',
+    nodeUrl: 'https://test.wax.eosusa.io',
+    name: "waxtestnet",
+    label: "WAX Testnet",
+    txExplorer: "https://wax-test.bloks.io/transaction",
+    proofSocket: "wss://wax-testnet-ibc.goldenplatform.com",
+    bridgeContract:"antelopeibc2",
+    wrapLockContractsArray: ["antelopewlk1", "antelopewlk2", "antelopewlk3", "antelopewlk4"],
+    decimals:8
+  },{
+    chainId: '1eaa0824707c8c16bd25145493bf062aecddfeb56c736f6ba6397f3195f33c9f',
+    nodeUrl: 'https://test.telos.eosusa.io',
+    txExplorer: "https://explorer-test.telos.net/transaction",
+    name: "telostestnet",
+    label: "Telos Testnet",
+    proofSocket: "wss://telos-testnet-ibc.goldenplatform.com",
+    bridgeContract:"antelopeibc2",
+    wrapLockContractsArray: ["antelopewlk1", "antelopewlk2", "antelopewlk3", "antelopewlk4"],
+  },{
+    chainId: '5002d6813ffe275d9471a7e3a301eab91c36e8017f9664b8431fbf0e812a0b04',
+    nodeUrl: 'https://test.ux.eosusa.io',
+    txExplorer: 'https://testnet.uxnetwork.io/tx',
+    name: "uxpubtestnet",
+    label: "UX Public Testnet",
+    proofSocket: "wss://testnet-ibc.uxnetwork.io",
+    bridgeContract:"antelopeibc2",
+    wrapLockContractsArray: ["antelopewlk1", "antelopewlk2", "antelopewlk3", "antelopewlk4"]
+  },{
     chainId: '73e4385a2708e6d7048834fbc1079f2fabb17b3c125b146af438971e90716c4d',
     nodeUrl: 'https://jungle4.api.eosnation.io', //api supporting send_transaction2
-    explorer: 'https://jungle4.eosq.eosnation.io',
+    txExplorer: 'https://jungle4.eosq.eosnation.io/tx',
     name: "jungle4",
     label: "Jungle 4 Testnet",
     proofSocket: "wss://jungle4-ibc.goldenplatform.com",
-    bridgeContract:"antelopeibc1",
-    wrapLockContractsArray: ["antelopewlk1"],
-    session:null,
-    wrapLockContracts: [],
-    symbols:null,
-    auth:null,
+    bridgeContract:"antelopeibc2",
+    wrapLockContractsArray: ["antelopewlk1", "antelopewlk2", "antelopewlk3", "antelopewlk4"],
     version:3.1 //Can fetch from get_info
   },{
     chainId: '5fff1dae8dc8e2fc4d5b23b2c7665c97f9e9d8edf2b6485a86ba311c25639191',
     nodeUrl: 'https://kylin.api.eosnation.io', //api supporting send_transaction2
-    explorer: 'https://kylin.eosq.eosnation.io',
+    txExplorer: 'https://kylin.eosq.eosnation.io/tx',
     name: "kylin",
     label: "Kylin Testnet",
     proofSocket: "wss://kylin-ibc.goldenplatform.com",
-    bridgeContract:"antelopeibc1",
-    wrapLockContractsArray: ["antelopewlk1"],
-    session:null,
-    wrapLockContracts: [],
-    symbols:null,
-    auth:null,
+    bridgeContract:"antelopeibc2",
+    wrapLockContractsArray: ["antelopewlk1", "antelopewlk2", "antelopewlk3", "antelopewlk4"],
     version:3.1 //Can fetch from get_info
   }];
 
-  let sourceChain, destinationChain, tokenRow, fetchProgress=0;
+  for (var chain of chains){
+    chain.session = null;
+    chain.symbols = null;
+    chain.auth = null;
+    chain.wrapLockContracts = [];
+  }
+
+  let sourceChain, destinationChain, tokenRow, fetchProgress=0,progressInterval;
   fetchTokens();
 
   async function fetchTokens(){
     //fetch wraplock contracts tokens & details
-    for (var chain of chains) {
-      for (var wrapLockContract of chain.wrapLockContractsArray) {
-        const result = await Promise.all([
-          $.post(`${chain.nodeUrl}/v1/chain/get_table_rows`, JSON.stringify({ json: true, code: wrapLockContract, scope: wrapLockContract, table: 'global'})),
-          $.post(`${chain.nodeUrl}/v1/chain/get_table_rows`, JSON.stringify({ json: true, code: wrapLockContract, scope: wrapLockContract, table: 'contractmap'}))
-        ]);
-        fetchProgress+=25;
-        $('.progressDiv').last().html(fetchProgress +"%");
+    let promises = [];
+    let allWraplockContracts = []
+    //get global and contractmap rows from each chain
+    for (var chain of chains) for (var wrapLockContract of chain.wrapLockContractsArray) {
+      allWraplockContracts.push(wrapLockContract);
+      promises.push(
+        $.post(`${chain.nodeUrl}/v1/chain/get_table_rows`, JSON.stringify({ json: true, code: wrapLockContract, scope: wrapLockContract, table: 'global'})),
+        $.post(`${chain.nodeUrl}/v1/chain/get_table_rows`, JSON.stringify({ json: true, code: wrapLockContract, scope: wrapLockContract, table: 'contractmap'}))
+      )
+    }
 
-        const global = result[0].rows[0];
-        const contractMaps = result[1].rows;
-
-        for (var map of contractMaps){
-          let symbolsres = await $.post(`${chain.nodeUrl}/v1/chain/get_table_by_scope`, JSON.stringify({ code: map.native_token_contract, table: 'stat'}));
-          let symbols = symbolsres.rows.map(r => toName(nameToUint64(r.scope)));
-          console.log(chain.name, "tokens",symbols)
-          chain.wrapLockContracts.push({
-            chain_id: global.chain_id,
-            wrapLockContract,
-            nativeTokenContract: map.native_token_contract,
-            pairedChainId: global.paired_chain_id,
-            pairedWrapTokenContract: map.paired_wraptoken_contract,
-            symbols
-          });
-        }
-        fetchProgress+=25;
-        $('.progressDiv').last().html(fetchProgress +"%");
+    const initialResults = (await Promise.all(promises)).map(r=>r.rows);
+    fetchProgress+=50;
+    $('.progressDiv').last().html(fetchProgress+"%");
+    let groupedResults = [];
+    while(initialResults.length > 2) groupedResults.push(initialResults.splice(0, 2));
+    let tokenPromises = []
+    for (var result of groupedResults){
+      const global = result[0][0];
+      const contractMaps = result[1];
+      for (var map of contractMaps){
+        const chain = chains.find(c=>c.chainId === global.chain_id);
+        if (!chain) continue;
+        tokenPromises.push($.post(`${chain.nodeUrl}/v1/chain/get_table_by_scope`, JSON.stringify({ code: map.native_token_contract, table: 'stat'})))
       }
     }
+    const tokenResults = await Promise.all(tokenPromises);
+
+    let tokenResultsIndex = 0;
+    for (var result of groupedResults){
+      const global = result[0][0];
+      const contractMaps = result[1];
+      for (var map of contractMaps){
+        const chain = chains.find(c=>c.chainId === global.chain_id);
+        const pairedChain = chains.find(c=>c.chainId === global.paired_chain_id);
+        if (!chain) continue;
+        let symbolsres = tokenResults[tokenResultsIndex];
+        let symbols = symbolsres.rows.map(r => toName(nameToUint64(r.scope)));
+        console.log(`${chain.name} -> ${pairedChain.name} tokens: ${symbols}`)
+        chain.wrapLockContracts.push({
+          chain_id: global.chain_id,
+          wrapLockContract: allWraplockContracts[tokenResultsIndex],
+          nativeTokenContract: map.native_token_contract,
+          pairedChainId: global.paired_chain_id,
+          pairedWrapTokenContract: map.paired_wraptoken_contract,
+          symbols
+        });
+        tokenResultsIndex++;
+      }
+    }
+    console.log("chains",chains)
+    $('.progressDiv').last().html("100%");
+
     //on DOM ready
     $(async function() {
       //add chain options to chain select elements
@@ -123,35 +174,42 @@
   }
 
   //handler for source chain change
-  const sourceChainChanged = val =>{
-    sourceChain = chains.find(c=>c.name==val);
-    destinationChain = chains.find(c=>c.name !== val);
-    $("#destinationChain").val(destinationChain.name);
-    $('#sourceLogin').show();
-    $('#destinationLogin').show();
-    $('#status').html("<div><div>Fetching tokens available for IBC</div><div class='progressDiv'>100%</div></div>");
-
-    //set sourceChain symbols if not yet set
-    if (!sourceChain.symbols) {
-      let id = 1, nativeList = [], wrappedList = [];
-      for (var row of sourceChain.wrapLockContracts) for (var symbol of row.symbols) {
-        nativeList.push({ ...row, id, symbol, sourceTokenContract: row.nativeTokenContract, destinationTokenContract: row.pairedWrapTokenContract,  native: true });
-        id++;
-      }
-      nativeList = nativeList.sort((a, b) => (a.symbol > b.symbol ? 1 : -1));
-
-      id = 1000;
-      for (var row of destinationChain.wrapLockContracts) for (var symbol of row.symbols) {
-        wrappedList.push({ ...row, id, symbol, sourceTokenContract: row.pairedWrapTokenContract, destinationTokenContract: row.nativeTokenContract, native: false });
-        id++;
-      }
-      wrappedList = wrappedList.sort((a, b) => (a.symbol > b.symbol ? 1 : -1));
-      sourceChain.symbols = [...nativeList, ...wrappedList];
-    }
-
+  const chainChanged = () =>{
     //clear Token select options
     $('#sourceAsset').find('option').remove().end();
     $('#sourceAsset').find('optgroup').remove().end();
+
+    let sourceName = $('#sourceChain').val();
+    let destinationName = $('#destinationChain').val();
+    sourceChain = chains.find(c=>c.name == sourceName);
+    destinationChain = chains.find(c=>c.name == destinationName);
+
+    if (sourceName === destinationName || !destinationName){
+      destinationChain = chains.find(c=>c.name !== sourceName);
+      $("#destinationChain").val(destinationChain.name);
+    }
+    $('#status').html("<div><div>Fetching tokens available for IBC</div><div class='progressDiv'>100%</div></div>");
+    logout("source");
+    logout("destination");
+    // $('#sourceLogin').show();
+    // $('#destinationLogin').show();
+
+    let id = 1, nativeList = [], wrappedList = [];
+    for (var row of sourceChain.wrapLockContracts.filter(r=>r.pairedChainId ==destinationChain.chainId)) for (var symbol of row.symbols) {
+      nativeList.push({ ...row, id, symbol, sourceTokenContract: row.nativeTokenContract, destinationTokenContract: row.pairedWrapTokenContract,  native: true });
+      id++;
+    }
+    nativeList = nativeList.sort((a, b) => (a.symbol > b.symbol ? 1 : -1));
+
+    id = 1000;
+    for (var row of destinationChain.wrapLockContracts.filter(r=>r.pairedChainId ==sourceChain.chainId)) for (var symbol of row.symbols) {
+      wrappedList.push({ ...row, id, symbol, sourceTokenContract: row.pairedWrapTokenContract, destinationTokenContract: row.nativeTokenContract, native: false });
+      id++;
+    }
+    wrappedList = wrappedList.sort((a, b) => (a.symbol > b.symbol ? 1 : -1));
+    sourceChain.symbols = [...nativeList, ...wrappedList];
+
+    
 
     //set Token select options
     let optionsHtml = `<optgroup label="Native">`
@@ -177,20 +235,22 @@
         $(`#${type}Logout`).text(`Logout ${chain.auth.actor}@${chain.auth.permission}`);
         $(`#${type}Logout`).show();
         $(`#${type}Chain`).prop('disabled', true);
-        $(`#transferBtn`).prop('disabled', chains.map(r=>r.session).includes(null));
+        
+        $(`#transferBtn`).prop('disabled', chains.filter(r=>[sourceChain.name, destinationChain.name].includes(r.name)).map(r=>r.session).includes(null));
       })
       .catch(ex=> alert(ex));
   }
 
   const logout = type => {
     const chain =  chains.find(c=>c.name===$(`#${type}Chain`).val());
+    $(`#${type}Logout`).hide();
+    $(`#${type}Login`).show();
+    $(`#${type}Chain`).prop('disabled', false);
+    $(`#transferBtn`).prop('disabled', true);
+    if (!chain || !chain.session) return;
     chain.session?.remove();
     chain.session = null;
     chain.auth = null;
-    $(`#${type}Logout`).hide();
-    $(`#${type}Login`).show();
-    if (!chains.find(c=>c.session) ) $(`#sourceChain`).prop('disabled', false);
-    $(`#transferBtn`).prop('disabled', chains.map(r=>r.session).includes(null));
   }
 
   const lock = () => {
@@ -209,6 +269,8 @@
     $(`#destinationLogout`).prop('disabled', false);
     $(`#sourceAsset`).prop('disabled', false);
     $(`#amount`).prop('disabled', false);
+    // logout('destination');
+    // logout('source');
   }
 
 
@@ -217,7 +279,7 @@
     //get values form UI
     tokenRow = sourceChain.symbols.find(r=>r.id===parseInt($('#sourceAsset').val()));
     let amount = parseFloat($("#amount").val());
-    const quantity = `${amount.toFixed(4)} ${tokenRow.symbol}`;
+    const quantity = `${amount.toFixed(sourceChain.decimals||4)} ${tokenRow.symbol}`;
     
     let sourceActions;
     if (tokenRow.native) sourceActions = [ transferToken({ tokenRow, sourceChain, destinationChain, quantity })]; //transfer token to the wraplock token
@@ -228,6 +290,7 @@
     //sign tx w/o broadcasting
     let signedTx;
     try{
+      console.log("sourceActions",sourceActions)
       signedTx = await sourceChain.session.transact({actions: sourceActions}, {broadcast:false, expireSeconds:360, blocksBehind:3});
       console.log("signedTx",signedTx)
     }catch(ex){
@@ -241,7 +304,7 @@
     $('#status').append(`<div><div>Waiting for TX irreversibility <span id="lockTx" style="margin-left:12px"></span></div><div class="progressDiv">0%</div></div>`);
                                                   
     let prog = 0;
-    let progressInterval = setInterval(()=>{
+    progressInterval = setInterval(()=>{
       prog = Math.min(prog +1, 100);
       $('.progressDiv').last().html(prog +"%");
     }, 1700);
@@ -249,27 +312,31 @@
     submitTx(signedTx, sourceChain ).then( async result => {
       clearInterval(progressInterval); //clear progress interval
       $('.progressDiv').last().html("100%");
-      $('#lockTx').html(`<a target="_blank" style="color:#1a8754" href="${sourceChain.explorer}/tx/${result.processed.id}">${tokenRow.native?'Lock TX':'Retire TX'}<a>`)
+      $('#lockTx').html(`<a target="_blank" style="color:#1a8754" href="${sourceChain.txExplorer}/${result.processed.id}">${tokenRow.native?'Lock TX':'Retire TX'}<a>`)
       console.log(result) // processed tx of transfer/retire
 
-      let emitxferAction = result.processed.action_traces.find(r=>r.act.name==='emitxfer'); //if flattened traces (e.g. nodeos v3.1)
-      if (!emitxferAction){ //if api returns inline traces within action_trace
+      let emitxferAction = result.processed.action_traces.find(r=>r.act.name==='emitxfer'); //if flattened traces (using send_transaction)
+      if (!emitxferAction){ //if api returns inline traces within action_trace (using push_transaction) shouldnt be used now
         const lockActionTrace = result.processed.action_traces.find(r=>r.act.name==='transfer' || r.act.name==='retire');
         emitxferAction = lockActionTrace.inline_traces.find(r=>r.act.name==='emitxfer');
+        console.log("!!!!!!!!!!!!!!!Shouldn't happen!!!!!!!!!!!!!!!!")
       }
       console.log("emitxferAction to prove", emitxferAction);
 
       //Get schedule proofs;
       const scheduleProofs = await getScheduleProofs(result.processed.block_num);
       console.log("scheduleProofs",scheduleProofs)
-      if (!scheduleProofs) return  $('#status').append(`<div><div>Error, no schedule proofs</div><div class="progressDiv"></div></div>`);
+      if (!scheduleProofs) {
+        $('#resetBtn').show();
+        return  $('#status').append(`<div><div>Error, no schedule proofs</div><div class="progressDiv"></div></div>`);
+      }
 
       $('#status').append(`<div><div>Fetching proof for interchain transfer</div><div class="progressDiv">0%</div></div>`);
       
       const emitxferProof = await getProof({
         type: "heavyProof",
         action: emitxferAction,
-        block_to_prove: emitxferAction.block_num //block that includes the emitxfer action we want to prove
+        block_to_prove: result.processed.block_num //block that includes the emitxfer action we want to prove
       });
       console.log("emitxferProof",emitxferProof)
 
@@ -282,12 +349,10 @@
 
       if (!signedDestinationTx || !signedDestinationTx.signatures) return $('#status').append(`<div>Error signing TX</div>`);
 
-      submitTx(signedDestinationTx, destinationChain, 2 ).then( async result => {
+      submitTx(signedDestinationTx, destinationChain, 6 ).then( async result => {
         $('.progressDiv').last().html("100%");
         console.log("result", result);
-        $('#proofTx').html(`<a target="_blank" style="color:#1a8754" href="${destinationChain.explorer}/tx/${result.processed.id}">Proof TX<a>`)
-
-        // $('#status').append(`<div style="margin-top:24px;"><a target="_blank" style="color:#1a8754" href="${destinationChain.explorer}/tx/${result.processed.id}">TX ID<a></div>`);
+        $('#proofTx').html(`<a target="_blank" style="color:#1a8754" href="${destinationChain.txExplorer}/${result.processed.id}">Proof TX<a>`)
         $('#resetBtn').show();
       }).catch(async err=>{
         $('.progressDiv').last().html("Error");
@@ -323,26 +388,30 @@
           limit: 1, reverse: true, show_payer: false, json: true
         }));
 
-        if (lastBlockProved) min_block = lastBlockProved.rows[0].block_height;
+        if (lastBlockProved && lastBlockProved.rows[0]) min_block = lastBlockProved.rows[0].block_height;
 
         let max_block = blocknum;
         
         //detect active schedule change
         while (max_block - min_block > 1) {
           blocknum = Math.round((max_block + min_block) / 2);
-          header = await $.post(sourceAPIURL + "/get_block", JSON.stringify({"block_num_or_id":blocknum,"json": true}));
-          if (header.schedule_version < target_schedule) min_block = blocknum;
-          else max_block = blocknum;
+          try{
+            header = await $.post(sourceAPIURL + "/get_block", JSON.stringify({"block_num_or_id":blocknum,"json": true}));
+            if (header.schedule_version < target_schedule) min_block = blocknum;
+            else max_block = blocknum;
+          }catch(ex){console.log("Internet connection lost, retrying")}
         }
         if (blocknum > 337) blocknum -= 337;
         //search before active schedule change for new_producer_schedule 
         let bCount = 0; //since header already checked once above
-        while (blocknum < max_block && !("new_producer_schedule" in header)) {
-          header = await $.post(sourceAPIURL + "/get_block", JSON.stringify({"block_num_or_id":blocknum,"json": true}));
-          bCount++;
-          blocknum++;
+        while (blocknum < max_block && (!("new_producer_schedule" in header) && !header.new_producers)) {
+          try{
+            header = await $.post(sourceAPIURL + "/get_block", JSON.stringify({"block_num_or_id":blocknum,"json": true}));
+            bCount++;
+            blocknum++;
+          }catch(ex){console.log("Internet connection lost, retrying")}
         }
-        blocknum--;
+        blocknum = header.block_num;
         return blocknum;  
       }catch(ex){ console.log("getProducerScheduleBlock ex",ex); return null;}
     }
@@ -354,9 +423,11 @@
       scope: sourceChain.name,
       limit: 1, reverse: true, show_payer: false, json: true
     }));
+    console.log("bridgeScheduleData",bridgeScheduleData)
     
     var last_proven_schedule_version = 0;
-    if (bridgeScheduleData.rows.length > 0) last_proven_schedule_version = bridgeScheduleData.rows[0].producer_schedule.version;
+    // if (bridgeScheduleData.rows.length > 0) last_proven_schedule_version = bridgeScheduleData.rows[0].producer_schedule.version;
+    if (bridgeScheduleData.rows.length > 0) last_proven_schedule_version = bridgeScheduleData.rows[0].version;
     if (!last_proven_schedule_version) return console.log('No Schedule Found in Contract!');
     console.log("Last proved source schedule:",last_proven_schedule_version);
 
@@ -447,28 +518,104 @@
   }
 
   const submitTx = (signedTx, chain, retry_trx_num_blocks=null) => {
-    let mandel = chain.version >=3;
+    let leap = chain.version && chain.version >=3;
     let url = `${chain.nodeUrl}/v1/chain/send_transaction`;
     let obj = {
-      transaction: {
-        signatures: signedTx.signatures,
-        compression: signedTx.compression || false,
-        packed_trx: arrayToHex(signedTx.resolved.serializedTransaction),
-        packed_context_free_data: null
-      }
+      signatures: signedTx.signatures,
+      compression: signedTx.compression || false,
+      packed_trx: arrayToHex(signedTx.resolved.serializedTransaction),
+      packed_context_free_data: null
     }
-    if (mandel){
+    if (leap){
       url+='2'; //use send transaction2 if available
       obj = {
-        ...obj,
+        transaction: obj,
         return_failure_trace: false,
         retry_trx: true,
         retry_trx_num_blocks, //if not specified, it defaults to LIB
       }
+      return $.post(url, JSON.stringify(obj));
     }
-    return $.post(url, JSON.stringify(obj));
+
+
+   return pushGurantee(chain, obj, retry_trx_num_blocks); //if waiting for lib
   }
 
+  
+  //Add retry logic and waiting for blocks to send_transaction, to emulate send_transaction2 retry_trx_num_blocks
+  const pushGurantee = async (chain, packedTx, retry_trx_num_blocks ) => new Promise(async resolve=>{
+    let tx;
+    try{
+      tx = await $.post(`${chain.nodeUrl}/v1/chain/send_transaction`, JSON.stringify(packedTx));
+      console.log("tx",JSON.parse(JSON.stringify(tx)));
+    }catch(ex){
+      if(progressInterval) clearInterval(progressInterval);
+      $('#resetBtn').show();
+      $('.progressDiv').last().html("0%");
+      console.log("Exception submitting tx", ex);
+      $('#status').append(`<br><div>Error submitting TX: </div>`);
+      $('#status').append(`<div>${ex.responseJSON.error.details[0].message}</div>`);
+      if (ex.responseJSON.error.details[1]) $('#status').append(`<div>${ex.responseJSON.error.details[1].message}</div>`)
+      return 
+    }
+
+    const transaction_id = tx.processed.id;
+    let finished = false;
+    let delay = 500;
+    while (!finished){
+      await sleep(delay);
+      delay*=1.1;
+      try{
+
+      
+        const block = await $.post(`${chain.nodeUrl}/v1/chain/get_block`, JSON.stringify({block_num_or_id: tx.processed.block_num }));
+        const txFound = block.transactions.find(r=>r.trx.id === transaction_id);
+        if (txFound) { //if tx is in block, check relation to retry_trx_num_blocks
+          const headInfo = await $.get(`${chain.nodeUrl}/v1/chain/get_info`);
+          // console.log("Blocks passed: ~" + (headInfo.head_block_num - tx.processed.block_num) + "/330", "LIB: " + headInfo.last_irreversible_block_num)
+          if (
+            (!retry_trx_num_blocks && headInfo.last_irreversible_block_num  >= tx.processed.block_num)  || // passed lib
+            (retry_trx_num_blocks && headInfo.head_block_num - tx.processed.block_num >= retry_trx_num_blocks) // passed blocks specified
+          ) finished = true;
+        }
+        else if(!txFound){ //if tx is not in block, resubmit packed tx
+          try{ 
+            tx = await $.post(`${chain.nodeUrl}/v1/chain/send_transaction`, JSON.stringify(packedTx)); 
+            console.log("tx not found in block (fork/stale block), resubmitted tx",tx);
+          }
+          catch(ex){//handle duplicate tx error, in case it auto got included in next block than reported, check next block and so on
+            console.log(ex)
+            //TODO verify exception is duplicate tx error
+            tx.processed.block_num++;
+            console.log("exception resubmitting duplicate tx, incremented block number to find tx", tx.processed.block_num)
+          }
+        }
+      }catch(ex){console.log("lost internet, retrying")}
+    }// end of while
+    if (retry_trx_num_blocks) return resolve(tx); //return tx if we dont need to worry about correct global action
+    //fetch from firehose to set correct global sequence (from produced block) in action_receipt
+    const ws = new WebSocket(sourceChain.proofSocket);
+    ws.addEventListener('open', (event) => ws.send(JSON.stringify({ type: "getBlockActions", block_to_prove: tx.processed.block_num })));
+    ws.addEventListener('message', (event) => {
+      const res = JSON.parse(event.data);
+      console.log("res",res)
+      const firhoseTx = res.txs.find(r=>r.find(s=>s.transactionId === transaction_id));
+      console.log("firhoseTx",firhoseTx)
+      const firehoseEmitxfer = firhoseTx.find(r=>r.action.name==='emitxfer');
+      console.log("firehoseEmitxfer",firehoseEmitxfer)
+      let emitxferAction = tx.processed.action_traces.find(r=>r.act.name==='emitxfer');
+      console.log("api emitxferAction receipt", JSON.parse(JSON.stringify(emitxferAction.receipt)))
+
+      emitxferAction.receipt = firehoseEmitxfer.receipt;
+      //convert firehose authSequence to expected format for ibc-proof server
+      let auth_sequence = [];
+      for (var auth of emitxferAction.receipt.auth_sequence) auth_sequence.push([auth.account, auth.sequence]);
+      emitxferAction.receipt.auth_sequence = auth_sequence;
+      console.log("bp emitxferAction receipt",firehoseEmitxfer.receipt)
+      resolve(tx);
+    });
+  })
+  const sleep = ms => new Promise(resolve=>setTimeout(resolve,ms)); 
 
   //action creation functions
   const transferToken = ({tokenRow, sourceChain, destinationChain, quantity} ) => ({
