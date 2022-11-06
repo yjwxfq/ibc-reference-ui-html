@@ -47,7 +47,16 @@
 </body>
 
 <script>
-  //chain Info;
+  
+  /*
+    Chain settings (change to connect to different infrastructure)
+    - nodeUrl: Nodeos API
+    - txExplorer: TX Explorer prefix
+    - proofSocket: IBC Proof WS Server
+    - bridgeContract: Name of account where IBC contract is deployed 
+    - wrapLockContractsArray: Array of the account names of desired wrap lock contracts
+  */
+
   const chains = [{
     chainId: 'f16b1833c747c43682f4386fca9cbb327929334a762755ebec17f6f23c9b8a12',
     nodeUrl: 'https://test.wax.eosusa.io',
