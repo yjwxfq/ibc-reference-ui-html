@@ -560,12 +560,12 @@
     }
 
 
-   return pushGurantee(chain, obj, retry_trx_num_blocks); //if waiting for lib
+   return pushGuarantee(chain, obj, retry_trx_num_blocks); //if waiting for lib
   }
 
   
   //Add retry logic and waiting for blocks to send_transaction, to emulate send_transaction2 retry_trx_num_blocks
-  const pushGurantee = async (chain, packedTx, retry_trx_num_blocks ) => new Promise(async resolve=>{
+  const pushGuarantee = async (chain, packedTx, retry_trx_num_blocks ) => new Promise(async resolve=>{
     let tx;
     try{
       tx = await $.post(`${chain.nodeUrl}/v1/chain/send_transaction`, JSON.stringify(packedTx));
