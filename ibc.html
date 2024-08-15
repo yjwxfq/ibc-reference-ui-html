@@ -133,7 +133,7 @@
     fetchProgress+=50;
     $('.progressDiv').last().html(fetchProgress+"%");
     let groupedResults = [];
-    while(initialResults.length > 2) groupedResults.push(initialResults.splice(0, 2));
+    while(initialResults.length >= 2) groupedResults.push(initialResults.splice(0, 2));
     let tokenPromises = []
     for (var result of groupedResults){
       const global = result[0][0];
