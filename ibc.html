@@ -622,7 +622,7 @@
     ws.addEventListener('message', (event) => {
       const res = JSON.parse(event.data);
       console.log("res",res)
-      const firhoseTx = res.txs.find(r=>r.find(s=>s.transactionId === transaction_id));
+      const firhoseTx = res.txs.find(r=>r.find(s=>s.transactionId === transaction_id.toUpperCase()));
       console.log("firhoseTx",firhoseTx)
       const firehoseEmitxfer = firhoseTx.find(r=>r.action.name==='emitxfer');
       console.log("firehoseEmitxfer",firehoseEmitxfer)
